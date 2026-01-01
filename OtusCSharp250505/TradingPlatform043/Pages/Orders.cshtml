@@ -1,0 +1,565 @@
+﻿@* Pages/Orders.cshtml *@
+@page
+@model TradingPlatform.Pages.OrdersModel
+@{
+    ViewData["Title"] = "Orders";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>📝 Orders</h1>
+        <div>
+            <span class="badge bg-info" id="ordersCountBadge">Total: @Model.Orders.TotalCount</span>
+            <a href="/Orders" class="btn btn-outline-secondary btn-sm ms-2">Manual Refresh</a>
+            <!-- Кнопка автообновления -->
+            <button id="autoRefreshBtn" class="btn btn-outline-primary btn-sm ms-2">
+                <i class="bi bi-play-circle"></i> Auto Refresh
+                <span id="autoRefreshStatus" class="ms-1">(OFF)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filters</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3" id="filterForm">
+                <div class="col-md-4">
+                    <label class="form-label">Ticker</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedTicker"
+                           id="tickerFilter"
+                           value="@Model.SelectedTicker"
+                           placeholder="Enter ticker (e.g., AAA)">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Status</label>
+                    <select class="form-control" name="selectedStatus" id="statusFilter">
+                        <option value="">All Statuses</option>
+                        <option value="Pending" selected="@(Model.SelectedStatus == "Pending")">Pending</option>
+                        <option value="Filled" selected="@(Model.SelectedStatus == "Filled")">Filled</option>
+                        <option value="Cancelled" selected="@(Model.SelectedStatus == "Cancelled")">Cancelled</option>
+                        <option value="Rejected" selected="@(Model.SelectedStatus == "Rejected")">Rejected</option>
+                        <option value="Expired" selected="@(Model.SelectedStatus == "Expired")">Expired</option>
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
+                    <button type="button" class="btn btn-outline-secondary" id="clearFiltersBtn">Clear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Таблица ордеров -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                Recent Orders
+                <small class="text-muted ms-2" id="lastUpdateText">
+                    Last update: @DateTime.Now.ToString("HH:mm:ss")
+                </small>
+            </h5>
+            <div>
+                <span class="badge bg-info">Page @Model.Orders.PageNumber of @Model.Orders.TotalPages</span>
+                <span class="badge bg-success ms-2" id="newOrdersBadge" style="display: none;">+0 new</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 600px;">
+                <table class="table table-hover mb-0" id="ordersTable">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Time <small class="text-muted">(newest first)</small></th>
+                            <th>Ticker</th>
+                            <th>Order #</th>
+                            <th>Side</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ordersTableBody">
+                        @foreach (var order in Model.Orders.Items.OrderByDescending(o => o.Timestamp))
+                        {
+                            <tr>
+                                <td>
+                                    @order.Timestamp.ToString("HH:mm:ss")
+                                    @if ((DateTime.Now - order.Timestamp).TotalSeconds < 10)
+                                    {
+                                        <span class="badge bg-warning ms-1">NEW</span>
+                                    }
+                                </td>
+                                <td><strong>@order.Ticker</strong></td>
+                                <td><small class="text-muted">#@order.OrderNumber</small></td>
+                                <td>
+                                    <span class="badge @(order.Side == "Buy" ? "bg-success" : "bg-danger")">
+                                        @order.Side
+                                    </span>
+                                </td>
+                                <td>@order.Price.ToString("N2")</td>
+                                <td>@order.Quantity.ToString("N0")</td>
+                                <td>
+                                    @{
+                                        var statusBadgeClass = order.Status switch
+                                        {
+                                            "Filled" => "bg-success",
+                                            "Pending" => "bg-warning",
+                                            "Cancelled" => "bg-secondary",
+                                            "Rejected" => "bg-danger",
+                                            "Expired" => "bg-info",
+                                            _ => "bg-secondary"
+                                        };
+                                    }
+                                    <span class="badge @statusBadgeClass">
+                                        @order.Status
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (Model.Orders.TotalPages > 1)
+        {
+            <div class="card-footer">
+                <nav>
+                    <ul class="pagination justify-content-center mb-0" id="pagination">
+                        @for (int i = 1; i <= Model.Orders.TotalPages; i++)
+                        {
+                            <li class="page-item @(i == Model.Orders.PageNumber ? "active" : "")">
+                                <a class="page-link"
+                                   href="/Orders?pageNumber=@i&selectedTicker=@Model.SelectedTicker&selectedStatus=@Model.SelectedStatus"
+                                   data-page="@i">
+                                    @i
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let autoRefreshEnabled = false;
+        let refreshInterval = null;
+        const REFRESH_INTERVAL = 5000; // 5 секунд
+
+        // Элементы DOM
+        let autoRefreshBtn = null;
+        let autoRefreshStatus = null;
+        let ordersCountBadge = null;
+        let lastUpdateText = null;
+        let newOrdersBadge = null;
+        let ordersTable = null;
+        let ordersTableBody = null;
+
+        // Простая анимация через изменение opacity
+        function animateTableRefresh() {
+            if (ordersTable) {
+                // Сохраняем текущую прозрачность
+                const originalOpacity = ordersTable.style.opacity || '1';
+
+                // Анимация: быстрое затемнение и осветление
+                ordersTable.style.transition = 'opacity 0.15s ease-in-out';
+                ordersTable.style.opacity = '0.8';
+
+                setTimeout(() => {
+                    ordersTable.style.opacity = '1';
+                }, 150);
+
+                // Возвращаем нормальное состояние
+                setTimeout(() => {
+                    ordersTable.style.transition = '';
+                    ordersTable.style.opacity = originalOpacity;
+                }, 300);
+            }
+        }
+
+        // Обновление времени последнего обновления
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            if (lastUpdateText) {
+                lastUpdateText.textContent = `Last update: ${timeStr}`;
+            }
+        }
+
+        // Обновление счетчика новых ордеров
+        let newOrdersCount = 0;
+        function updateNewOrdersCount(increment = 0) {
+            if (increment > 0) {
+                newOrdersCount += increment;
+                newOrdersBadge.textContent = `+${newOrdersCount} new`;
+                newOrdersBadge.style.display = 'inline';
+
+                // Через 5 секунд сбрасываем счетчик
+                setTimeout(() => {
+                    newOrdersCount = 0;
+                    newOrdersBadge.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Получение цвета статуса для бейджа
+        function getStatusBadgeClass(status) {
+            switch (status) {
+                case 'Filled': return 'bg-success';
+                case 'Pending': return 'bg-warning';
+                case 'Cancelled': return 'bg-secondary';
+                case 'Rejected': return 'bg-danger';
+                case 'Expired': return 'bg-info';
+                default: return 'bg-secondary';
+            }
+        }
+
+        // Загрузка данных через API
+        async function loadOrdersData() {
+            try {
+                const ticker = document.getElementById('tickerFilter').value || '';
+                const status = document.getElementById('statusFilter').value || '';
+                const page = 1; // ВСЕГДА первая страница при автообновлении, чтобы видеть новые ордера
+
+                console.log(`Loading orders: ticker=${ticker}, status=${status}, page=${page}`);
+
+                const response = await fetch(`/api/trading/orders?ticker=${encodeURIComponent(ticker)}&strategy=${encodeURIComponent(status)}&page=${page}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('API response:', data);
+
+                // Обновляем таблицу если данные получены
+                if (data && data.items && Array.isArray(data.items)) {
+                    updateOrdersTable(data.items);
+                }
+
+                // Обновляем счетчик
+                if (data && data.totalCount !== undefined) {
+                    ordersCountBadge.textContent = `Total: ${data.totalCount}`;
+                }
+
+                // Обновляем время
+                updateLastUpdateTime();
+
+                // Анимируем таблицу
+                animateTableRefresh();
+
+                // Обновляем счетчик новых ордеров (если есть новые)
+                if (data.items && data.items.length > 0) {
+                    // Проверяем, есть ли действительно новые ордера
+                    updateNewOrdersCount(data.items.length);
+                }
+
+                console.log('✅ Данные успешно обновлены');
+
+            } catch (error) {
+                console.error('❌ Ошибка загрузки данных:', error);
+            }
+        }
+
+        // Обновление таблицы ордеров
+        function updateOrdersTable(orders) {
+            if (!ordersTableBody) return;
+
+            // Очищаем таблицу
+            ordersTableBody.innerHTML = '';
+
+            // Сортируем ордера по времени (новые сверху)
+            orders.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            // Добавляем ордера в таблицу
+            orders.forEach(order => {
+                const row = document.createElement('tr');
+
+                // Форматируем время
+                const timestamp = new Date(order.timestamp);
+                const timeStr = timestamp.toLocaleTimeString('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                // Проверяем, новый ли это ордер (последние 10 секунд)
+                const isNew = (Date.now() - timestamp.getTime()) < 10000;
+
+                // Определяем классы для Side и Status
+                const sideClass = order.side === 'Buy' ? 'bg-success' : 'bg-danger';
+                const statusClass = getStatusBadgeClass(order.status);
+
+                row.innerHTML = `
+                    <td>
+                        ${timeStr}
+                        ${isNew ? '<span class="badge bg-warning ms-1">NEW</span>' : ''}
+                    </td>
+                    <td><strong>${order.ticker}</strong></td>
+                    <td><small class="text-muted">#${order.orderNumber}</small></td>
+                    <td>
+                        <span class="badge ${sideClass}">${order.side}</span>
+                    </td>
+                    <td>${order.price.toFixed(2)}</td>
+                    <td>${order.quantity.toLocaleString()}</td>
+                    <td>
+                        <span class="badge ${statusClass}">${order.status}</span>
+                    </td>
+                `;
+
+                // Добавляем анимацию для новых ордеров
+                if (isNew) {
+                    row.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
+                    row.style.animation = 'fadeOutBackground 2s forwards';
+
+                    // Добавляем стиль для анимации
+                    if (!document.querySelector('#fadeOutStyle')) {
+                        const style = document.createElement('style');
+                        style.id = 'fadeOutStyle';
+                        style.textContent = `
+                            @@keyframes fadeOutBackground {
+                                from { background-color: rgba(255, 255, 0, 0.1); }
+                                to { background-color: transparent; }
+                            }
+                        `;
+                        document.head.appendChild(style);
+                    }
+                }
+
+                // Подсветка по статусу
+                if (order.status === 'Filled') {
+                    row.style.backgroundColor = 'rgba(0, 255, 0, 0.05)';
+                } else if (order.status === 'Rejected') {
+                    row.style.backgroundColor = 'rgba(255, 0, 0, 0.05)';
+                }
+
+                ordersTableBody.appendChild(row);
+            });
+        }
+
+        // Переключение автообновления
+        function toggleAutoRefresh() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+
+            if (autoRefreshEnabled) {
+                // Включаем автообновление
+                autoRefreshBtn.innerHTML = '<i class="bi bi-pause-circle"></i> Auto Refresh';
+                autoRefreshBtn.classList.remove('btn-outline-primary');
+                autoRefreshBtn.classList.add('btn-primary');
+                autoRefreshStatus.textContent = '(ON)';
+
+                // Запускаем автообновление
+                refreshInterval = setInterval(() => {
+                    console.log('Auto-refreshing orders...');
+                    loadOrdersData();
+                }, REFRESH_INTERVAL);
+
+                // Немедленная загрузка данных
+                loadOrdersData();
+
+            } else {
+                // Выключаем автообновление
+                autoRefreshBtn.innerHTML = '<i class="bi bi-play-circle"></i> Auto Refresh';
+                autoRefreshBtn.classList.remove('btn-primary');
+                autoRefreshBtn.classList.add('btn-outline-primary');
+                autoRefreshStatus.textContent = '(OFF)';
+
+                // Останавливаем автообновление
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                    refreshInterval = null;
+                }
+            }
+        }
+
+        // Очистка фильтров
+        function clearFilters() {
+            document.getElementById('tickerFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+
+            // Если автообновление включено, загружаем данные
+            if (autoRefreshEnabled) {
+                loadOrdersData();
+            } else {
+                // Иначе перезагружаем страницу
+                window.location.href = '/Orders';
+            }
+        }
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Orders page loaded');
+
+            // Инициализируем элементы
+            autoRefreshBtn = document.getElementById('autoRefreshBtn');
+            autoRefreshStatus = document.getElementById('autoRefreshStatus');
+            ordersCountBadge = document.getElementById('ordersCountBadge');
+            lastUpdateText = document.getElementById('lastUpdateText');
+            newOrdersBadge = document.getElementById('newOrdersBadge');
+            ordersTable = document.getElementById('ordersTable');
+            ordersTableBody = document.getElementById('ordersTableBody');
+
+            // Назначаем обработчики
+            if (autoRefreshBtn) {
+                autoRefreshBtn.addEventListener('click', toggleAutoRefresh);
+            }
+
+            if (document.getElementById('clearFiltersBtn')) {
+                document.getElementById('clearFiltersBtn').addEventListener('click', clearFilters);
+            }
+
+            // Обработчик формы фильтров (предотвращаем перезагрузку страницы)
+            if (document.getElementById('filterForm')) {
+                document.getElementById('filterForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    // Если автообновление включено, используем его для загрузки данных
+                    if (autoRefreshEnabled) {
+                        loadOrdersData();
+                    } else {
+                        // Иначе отправляем форму обычным способом
+                        this.submit();
+                    }
+                });
+            }
+
+            // Обновляем время при загрузке
+            updateLastUpdateTime();
+
+            // Автоматически включаем автообновление при загрузке (опционально)
+            // toggleAutoRefresh();
+        });
+
+        // Очистка при закрытии страницы
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+}
+
+@* @page
+@model TradingPlatform.Pages.OrdersModel
+@{
+    ViewData["Title"] = "Orders";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>📝 Orders</h1>
+        <div>
+            <span class="badge bg-info">Total: @Model.Orders.TotalCount</span>
+            <a href="/Orders" class="btn btn-outline-secondary btn-sm ms-2">Refresh</a>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filters</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Ticker</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedTicker"
+                           value="@Model.SelectedTicker"
+                           placeholder="Enter ticker (e.g., AAA)">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Strategy</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedStrategy"
+                           value="@Model.SelectedStrategy"
+                           placeholder="Enter strategy (e.g., AAA_05s)">
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
+                    <a href="/Orders" class="btn btn-outline-secondary">Clear</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Таблица ордеров -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Orders</h5>
+            <span class="badge bg-info">Page @Model.Orders.PageNumber of @Model.Orders.TotalPages</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 600px;">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Time</th>
+                            <th>Ticker</th>
+                            <th>Order #</th>
+                            <th>Side</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var order in Model.Orders.Items)
+                        {
+                            <tr>
+                                <td>@order.Timestamp.ToString("HH:mm:ss")</td>
+                                <td><strong>@order.Ticker</strong></td>
+                                <td><small class="text-muted">#@order.OrderNumber</small></td>
+                                <td>
+                                    <span class="badge @(order.Side == "Buy" ? "bg-success" : "bg-danger")">
+                                        @order.Side
+                                    </span>
+                                </td>
+                                <td>@order.Price.ToString("N2")</td>
+                                <td>@order.Quantity.ToString("N0")</td>
+                                <td>
+                                    <span class="badge @(order.Status == "Filled" ? "bg-success" : order.Status == "Pending" ? "bg-warning" : "bg-secondary")">
+                                        @order.Status
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (Model.Orders.TotalPages > 1)
+        {
+            <div class="card-footer">
+                <nav>
+                    <ul class="pagination justify-content-center mb-0">
+                        @for (int i = 1; i <= Model.Orders.TotalPages; i++)
+                        {
+                            <li class="page-item @(i == Model.Orders.PageNumber ? "active" : "")">
+                                <a class="page-link"
+                                   href="/Orders?pageNumber=@i&selectedTicker=@Model.SelectedTicker&selectedStrategy=@Model.SelectedStrategy">
+                                    @i
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            </div>
+        }
+    </div>
+</div>
+ *@

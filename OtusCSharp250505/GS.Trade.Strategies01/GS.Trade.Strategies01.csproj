@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GS.Trade.Abstarctions01\GS.Trade.Abstractions01.csproj" />
+    <ProjectReference Include="..\GS.Trade.Core.01\GS.Trade.Core01.csproj" />
+  </ItemGroup>
+
+</Project>

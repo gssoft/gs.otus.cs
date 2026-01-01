@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="BusLibrary02.Core/BusLibrary02.Core.csproj" />
+  <Project Path="GS.Trade.Abstarctions01/GS.Trade.Abstractions01.csproj" />
+  <Project Path="GS.Trade.Core.01/GS.Trade.Core01.csproj" />
+  <Project Path="GS.Trade.Strategies01/GS.Trade.Strategies01.csproj" />
+  <Project Path="TradingPlatform043/TradingPlatform043.csproj" />
+</Solution>
