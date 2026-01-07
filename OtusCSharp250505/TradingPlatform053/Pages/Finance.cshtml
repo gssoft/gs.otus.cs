@@ -1,0 +1,54 @@
+﻿
+
+@page
+@model TradingPlatform.Pages.FinanceModel
+@{
+    Layout = "_Layout";
+}
+
+<div id="chart-container">
+@{
+    if (ViewBag.Viewer is Array)
+    {
+        for (int i = 0; i < ViewBag.Viewer.Length; ++i)
+        {
+            @Html.Raw(ViewBag.Viewer[i].RenderHTML())
+        }
+    }
+    else
+    {
+        @Html.Raw(ViewBag.Viewer.RenderHTML())
+    }
+}
+</div>
+
+<script>
+    (function(){
+    const container = document.getElementById('chart-container');
+    async function refreshChart() {
+        try {
+            const resp = await fetch('@Url.Page("/Finance", "ChartHtml")', {
+                method: 'GET',
+                headers: { 'Accept': 'text/html' },
+                cache: 'no-store'
+            });
+            
+            if (!resp.ok) {
+                console.error('Fetch failed:', resp.status, resp.statusText);
+                return;
+            }
+            const html = await resp.text();
+            container.innerHTML = html;
+        } catch(e) {
+            console.error('Error refreshing chart:', e);
+        }
+    }
+
+    // Обновляем каждые 1400 мс
+    const intervalMs = 1400;
+    setInterval(refreshChart, intervalMs);
+    
+    // Первое обновление через 1 секунду после загрузки
+    setTimeout(refreshChart, 1000);
+    })();
+</script>

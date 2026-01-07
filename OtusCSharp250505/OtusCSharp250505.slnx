@@ -4,4 +4,5 @@
   <Project Path="GS.Trade.Core.01/GS.Trade.Core01.csproj" />
   <Project Path="GS.Trade.Strategies01/GS.Trade.Strategies01.csproj" />
   <Project Path="TradingPlatform043/TradingPlatform043.csproj" />
+  <Project Path="TradingPlatform053/TradingPlatform053.csproj" />
 </Solution>
