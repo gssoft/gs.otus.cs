@@ -35,8 +35,8 @@ builder.Logging.AddFilter("System", LogLevel.Warning);
 builder.Logging.AddFilter("TradingPlatform.Services.QuotesConsoleService", LogLevel.Information); // Котировки
 builder.Logging.AddFilter("TradingPlatform.Services.StrategiesExecutionService", LogLevel.Warning); // Стратегии
 builder.Logging.AddFilter("TradingPlatform.Services.TradingMonitorService", LogLevel.Warning); // Монитор
-builder.Logging.AddFilter("TradingPlatform.Charts.TickerChartAdapter", LogLevel.Debug);
-builder.Logging.AddFilter("TradingPlatform.Charts.ChartContainer", LogLevel.Debug); // Добавлено
+// builder.Logging.AddFilter("TradingPlatform.Charts.TickerChartAdapter", LogLevel.Debug);
+// builder.Logging.AddFilter("TradingPlatform.Charts.ChartContainer", LogLevel.Debug); // Добавлено и Отбавлено обратно ХеХе
 
 // EventHubStrategy - только важные сообщения (покупки/продажи)
 builder.Logging.AddFilter("TradingPlatform.Services.EventHubStrategy", LogLevel.Information);
