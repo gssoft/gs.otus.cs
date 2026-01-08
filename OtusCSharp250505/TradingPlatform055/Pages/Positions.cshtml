@@ -1,0 +1,661 @@
+﻿@page
+@model TradingPlatform.Pages.PositionsModel
+@{
+    ViewData["Title"] = "Positions";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>📊 Positions</h1>
+        <div>
+            <span class="badge bg-info" id="positionsCountBadge">Total: @Model.TotalCount</span>
+            <a href="/Positions" class="btn btn-outline-secondary btn-sm ms-2">Manual Refresh</a>
+            <!-- Кнопка автообновления -->
+            <button id="autoRefreshBtn" class="btn btn-outline-primary btn-sm ms-2">
+                <i class="bi bi-play-circle"></i> Auto Refresh
+                <span id="autoRefreshStatus" class="ms-1">(OFF)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Агрегированная статистика -->
+    <div class="row mb-4" id="positionsStats">
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Total P&L</h6>
+                    <h3 id="totalPnl" class="@(Model.TotalPnL > 0 ? "text-success" : Model.TotalPnL < 0 ? "text-danger" : "text-dark")">
+                        @Model.TotalPnL.ToString("N2")
+                    </h3>
+                    <small class="text-muted">
+                        Open: <span id="totalOpenPnl" class="@(Model.TotalOpenPnL > 0 ? "text-success" : "text-danger")">
+                            @Model.TotalOpenPnL.ToString("N2")
+                        </span>
+                        | Closed: <span id="totalClosedPnl" class="@(Model.TotalClosedPnL > 0 ? "text-success" : "text-danger")">
+                            @Model.TotalClosedPnL.ToString("N2")
+                        </span>
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Total Exposure</h6>
+                    <h3 id="totalExposure" class="text-primary">@Model.TotalExposure.ToString("N2")</h3>
+                    <small class="text-muted">Market Value</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Open Positions</h6>
+                    <h3 id="openPositionsCount" class="text-info">@Model.Positions.Count(p => p.IsOpenPosition)</h3>
+                    <small class="text-muted">Active strategies</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Avg P&L %</h6>
+                    <h3 id="avgPnlPercent" class="text-warning">0.00%</h3>
+                    <small class="text-muted">Average return</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filters</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3" id="filterForm">
+                <div class="col-md-3">
+                    <label class="form-label">Ticker</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedTicker"
+                           id="tickerFilter"
+                           value="@Model.SelectedTicker"
+                           placeholder="Enter ticker (e.g., AAA)">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Strategy</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedStrategy"
+                           id="strategyFilter"
+                           value="@Model.SelectedStrategy"
+                           placeholder="Enter strategy (e.g., AAA_05s)">
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               name="onlyOpenPositions"
+                               id="onlyOpenPositions"
+                               value="true"
+                               @(Model.OnlyOpenPositions ? "checked" : "")>
+                        <label class="form-check-label" for="onlyOpenPositions">
+                            Only Open Positions
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
+                    <button type="button" class="btn btn-outline-secondary" id="clearFiltersBtn">Clear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Таблица позиций -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                Current Positions
+                <small class="text-muted ms-2" id="lastUpdateText">
+                    Last update: @DateTime.Now.ToString("HH:mm:ss")
+                </small>
+            </h5>
+            <div>
+                <span class="badge bg-info">Page @Model.PageNumber of @Model.TotalPages</span>
+                <span class="badge bg-success ms-2" id="updatedPositionsBadge" style="display: none;">+0 updated</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 600px;">
+                <table class="table table-hover mb-0" id="positionsTable">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Strategy</th>
+                            <th>Position</th>
+                            <th>Current Price</th>
+                            <th>Avg. Price</th>
+                            <th>Exposure</th>
+                            <th>Open P&L</th>
+                            <th>Closed P&L</th>
+                            <th>Total P&L</th>
+                            <th>P&L %</th>
+                            <th>Status</th>
+                            <th>Last Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positionsTableBody">
+                        @foreach (var position in Model.Positions)
+                        {
+                            <tr class="@(position.Position > 0 ? "table-success-light" : position.Position < 0 ? "table-danger-light" : "table-light")">
+                                <td><strong>@position.Ticker</strong></td>
+                                <td><small class="text-muted">@position.Strategy</small></td>
+                                <td>
+                                    <span class="@(position.Position > 0 ? "text-success fw-bold" : position.Position < 0 ? "text-danger fw-bold" : "text-muted")">
+                                        @if (position.Position > 0)
+                                        {
+                                            <span>LONG</span>
+                                        }
+                                        else if (position.Position < 0)
+                                        {
+                                            <span>SHORT</span>
+                                        }
+                                        <span class="ms-1">@Math.Abs(position.Position).ToString("N0")</span>
+                                    </span>
+                                </td>
+                                <td>@position.CurrentPrice.ToString("N2")</td>
+                                <td>@position.AveragePrice.ToString("N2")</td>
+                                <td>@position.Exposure.ToString("N2")</td>
+                                <td class="@(position.OpenPnL > 0 ? "text-success" : position.OpenPnL < 0 ? "text-danger" : "")">
+                                    @position.OpenPnL.ToString("N2")
+                                </td>
+                                <td class="@(position.ClosedPnL > 0 ? "text-success" : position.ClosedPnL < 0 ? "text-danger" : "")">
+                                    @position.ClosedPnL.ToString("N2")
+                                </td>
+                                <td class="@(position.TotalPnL > 0 ? "text-success fw-bold" : position.TotalPnL < 0 ? "text-danger fw-bold" : "")">
+                                    <strong>@position.TotalPnL.ToString("N2")</strong>
+                                </td>
+                                <td class="@(position.TotalPnL > 0 ? "text-success" : position.TotalPnL < 0 ? "text-danger" : "")">
+                                    @if (position.Exposure > 0)
+                                    {
+                                        var percent = (position.TotalPnL / position.Exposure) * 100;
+                                        <span>@percent.ToString("N2")%</span>
+                                    }
+                                    else
+                                    {
+                                        <span>0.00%</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (position.IsOpenPosition)
+                                    {
+                                        <span class="badge bg-warning">OPEN</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">CLOSED</span>
+                                    }
+                                </td>
+                                <td>@position.LastUpdated.ToString("HH:mm:ss")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (Model.TotalPages > 1)
+        {
+            <div class="card-footer">
+                <nav>
+                    <ul class="pagination justify-content-center mb-0" id="pagination">
+                        @for (int i = 1; i <= Model.TotalPages; i++)
+                        {
+                            <li class="page-item @(i == Model.PageNumber ? "active" : "")">
+                                <a class="page-link"
+                                   href="/Positions?pageNumber=@i&selectedTicker=@Model.SelectedTicker&selectedStrategy=@Model.SelectedStrategy&onlyOpenPositions=@Model.OnlyOpenPositions"
+                                   data-page="@i">
+                                    @i
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            </div>
+        }
+    </div>
+
+    <!-- Легенда -->
+    <div class="mt-3">
+        <div class="alert alert-light">
+            <h6 class="mb-2">Legend:</h6>
+            <div class="row">
+                <div class="col-md-3">
+                    <span class="badge bg-success">LONG</span> = Positive position
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-danger">SHORT</span> = Negative position
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-warning">OPEN</span> = Position is open
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-secondary">CLOSED</span> = Position is closed
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let autoRefreshEnabled = false;
+        let refreshInterval = null;
+        const REFRESH_INTERVAL = 10000; // 10 секунд (позиции меняются реже)
+
+        // Элементы DOM
+        let autoRefreshBtn = null;
+        let autoRefreshStatus = null;
+        let positionsCountBadge = null;
+        let lastUpdateText = null;
+        let updatedPositionsBadge = null;
+        let positionsTable = null;
+        let positionsTableBody = null;
+
+        // Статистические элементы
+        let totalPnlElement = null;
+        let totalOpenPnlElement = null;
+        let totalClosedPnlElement = null;
+        let totalExposureElement = null;
+        let openPositionsCountElement = null;
+        let avgPnlPercentElement = null;
+
+        // Простая анимация через изменение opacity
+        function animateTableRefresh() {
+            if (positionsTable) {
+                // Сохраняем текущую прозрачность
+                const originalOpacity = positionsTable.style.opacity || '1';
+
+                // Анимация: быстрое затемнение и осветление
+                positionsTable.style.transition = 'opacity 0.15s ease-in-out';
+                positionsTable.style.opacity = '0.8';
+
+                setTimeout(() => {
+                    positionsTable.style.opacity = '1';
+                }, 150);
+
+                // Возвращаем нормальное состояние
+                setTimeout(() => {
+                    positionsTable.style.transition = '';
+                    positionsTable.style.opacity = originalOpacity;
+                }, 300);
+            }
+        }
+
+        // Обновление времени последнего обновления
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            if (lastUpdateText) {
+                lastUpdateText.textContent = `Last update: ${timeStr}`;
+            }
+        }
+
+        // Обновление счетчика обновленных позиций
+        let updatedPositionsCount = 0;
+        function updatePositionsCounter(increment = 0) {
+            if (increment > 0) {
+                updatedPositionsCount += increment;
+                updatedPositionsBadge.textContent = `+${updatedPositionsCount} updated`;
+                updatedPositionsBadge.style.display = 'inline';
+
+                // Через 10 секунд сбрасываем счетчик
+                setTimeout(() => {
+                    updatedPositionsCount = 0;
+                    updatedPositionsBadge.style.display = 'none';
+                }, 10000);
+            }
+        }
+
+        // Получение класса строки для позиции
+        function getPositionRowClass(position) {
+            if (position > 0) return 'table-success-light';
+            if (position < 0) return 'table-danger-light';
+            return 'table-light';
+        }
+
+        // Получение класса текста для позиции
+        function getPositionTextClass(position) {
+            if (position > 0) return 'text-success fw-bold';
+            if (position < 0) return 'text-danger fw-bold';
+            return 'text-muted';
+        }
+
+        // Получение класса для PnL
+        function getPnlClass(value) {
+            if (value > 0) return 'text-success';
+            if (value < 0) return 'text-danger';
+            return '';
+        }
+
+        // Получение класса для Total PnL
+        function getTotalPnlClass(value) {
+            if (value > 0) return 'text-success fw-bold';
+            if (value < 0) return 'text-danger fw-bold';
+            return '';
+        }
+
+        // Обновление статистики
+        function updateStatistics(positions) {
+            if (!positions || positions.length === 0) {
+                totalPnlElement.textContent = '0.00';
+                totalOpenPnlElement.textContent = '0.00';
+                totalClosedPnlElement.textContent = '0.00';
+                totalExposureElement.textContent = '0.00';
+                openPositionsCountElement.textContent = '0';
+                avgPnlPercentElement.textContent = '0.00%';
+                return;
+            }
+
+            // Вычисляем агрегаты
+            const totalOpenPnL = positions.reduce((sum, p) => sum + p.openPnL, 0);
+            const totalClosedPnL = positions.reduce((sum, p) => sum + p.closedPnL, 0);
+            const totalPnL = totalOpenPnL + totalClosedPnL;
+            const totalExposure = positions
+                .filter(p => p.position !== 0)
+                .reduce((sum, p) => sum + Math.abs(p.position * p.currentPrice), 0);
+            const openPositionsCount = positions.filter(p => p.position !== 0).length;
+
+            // Рассчитываем средний процент P&L
+            let avgPnlPercent = 0;
+            const positionsWithExposure = positions.filter(p => p.exposure > 0);
+            if (positionsWithExposure.length > 0) {
+                const totalPercent = positionsWithExposure.reduce((sum, p) => {
+                    const pnlPercent = (p.totalPnL / p.exposure) * 100;
+                    return sum + pnlPercent;
+                }, 0);
+                avgPnlPercent = totalPercent / positionsWithExposure.length;
+            }
+
+            // Обновляем элементы
+            totalPnlElement.textContent = totalPnL.toFixed(2);
+            totalPnlElement.className = totalPnL > 0 ? 'text-success' : totalPnL < 0 ? 'text-danger' : 'text-dark';
+
+            totalOpenPnlElement.textContent = totalOpenPnL.toFixed(2);
+            totalOpenPnlElement.className = totalOpenPnL > 0 ? 'text-success' : totalOpenPnL < 0 ? 'text-danger' : 'text-dark';
+
+            totalClosedPnlElement.textContent = totalClosedPnL.toFixed(2);
+            totalClosedPnlElement.className = totalClosedPnL > 0 ? 'text-success' : totalClosedPnL < 0 ? 'text-danger' : 'text-dark';
+
+            totalExposureElement.textContent = totalExposure.toFixed(2);
+            openPositionsCountElement.textContent = openPositionsCount;
+            avgPnlPercentElement.textContent = avgPnlPercent.toFixed(2) + '%';
+            avgPnlPercentElement.className = avgPnlPercent > 0 ? 'text-success' : avgPnlPercent < 0 ? 'text-danger' : 'text-warning';
+        }
+
+        // Загрузка данных через API
+        async function loadPositionsData() {
+            try {
+                const ticker = document.getElementById('tickerFilter').value || '';
+                const strategy = document.getElementById('strategyFilter').value || '';
+                const onlyOpenPositions = document.getElementById('onlyOpenPositions').checked;
+                const page = 1; // ВСЕГДА первая страница при автообновлении
+
+                console.log(`Loading positions: ticker=${ticker}, strategy=${strategy}, onlyOpen=${onlyOpenPositions}, page=${page}`);
+
+                // Загружаем все сводки
+                const response = await fetch('/api/trading/summaries');
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('API response:', data);
+
+                // Фильтруем данные
+                let filteredPositions = data;
+
+                if (ticker) {
+                    filteredPositions = filteredPositions.filter(p => p.ticker === ticker);
+                }
+
+                if (strategy) {
+                    filteredPositions = filteredPositions.filter(p => p.strategy === strategy);
+                }
+
+                if (onlyOpenPositions) {
+                    filteredPositions = filteredPositions.filter(p => p.position !== 0);
+                }
+
+                // Сортируем: сначала открытые позиции, потом по убыванию PnL
+                filteredPositions = filteredPositions.sort((a, b) => {
+                    // Сначала открытые позиции
+                    if (a.position !== 0 && b.position === 0) return -1;
+                    if (a.position === 0 && b.position !== 0) return 1;
+
+                    // Затем по абсолютному значению позиции
+                    return Math.abs(b.position) - Math.abs(a.position);
+                });
+
+                // Обновляем таблицу если данные получены
+                if (filteredPositions && Array.isArray(filteredPositions)) {
+                    updatePositionsTable(filteredPositions);
+                }
+
+                // Обновляем счетчик
+                if (filteredPositions) {
+                    positionsCountBadge.textContent = `Total: ${filteredPositions.length}`;
+                }
+
+                // Обновляем время
+                updateLastUpdateTime();
+
+                // Анимируем таблицу
+                animateTableRefresh();
+
+                // Обновляем счетчик обновленных позиций
+                if (filteredPositions && filteredPositions.length > 0) {
+                    updatePositionsCounter(1);
+                }
+
+                console.log('✅ Данные успешно обновлены');
+
+            } catch (error) {
+                console.error('❌ Ошибка загрузки данных:', error);
+            }
+        }
+
+        // Обновление таблицы позиций
+        function updatePositionsTable(positions) {
+            if (!positionsTableBody) return;
+
+            // Очищаем таблицу
+            positionsTableBody.innerHTML = '';
+
+            // Добавляем позиции в таблицу
+            positions.forEach(position => {
+                const row = document.createElement('tr');
+
+                // Определяем классы
+                const rowClass = getPositionRowClass(position.position);
+                const positionTextClass = getPositionTextClass(position.position);
+                const openPnlClass = getPnlClass(position.openPnL);
+                const closedPnlClass = getPnlClass(position.closedPnL);
+                const totalPnlClass = getTotalPnlClass(position.totalPnL);
+
+                // Вычисляем дополнительные значения
+                const exposure = Math.abs(position.position * position.currentPrice);
+                const pnlPercent = exposure > 0 ? (position.totalPnL / exposure) * 100 : 0;
+                const pnlPercentClass = getPnlClass(position.totalPnL);
+                const isOpenPosition = position.position !== 0;
+
+                // Форматируем время
+                const lastUpdated = new Date(position.lastUpdated);
+                const timeStr = lastUpdated.toLocaleTimeString('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                row.className = rowClass;
+                row.innerHTML = `
+                    <td><strong>${position.ticker}</strong></td>
+                    <td><small class="text-muted">${position.strategy}</small></td>
+                    <td>
+                        <span class="${positionTextClass}">
+                            ${position.position > 0 ? 'LONG' : position.position < 0 ? 'SHORT' : ''}
+                            <span class="ms-1">${Math.abs(position.position).toLocaleString()}</span>
+                        </span>
+                    </td>
+                    <td>${position.currentPrice.toFixed(2)}</td>
+                    <td>${position.currentPrice.toFixed(2)}</td>
+                    <td>${exposure.toFixed(2)}</td>
+                    <td class="${openPnlClass}">${position.openPnL.toFixed(2)}</td>
+                    <td class="${closedPnlClass}">${position.closedPnL.toFixed(2)}</td>
+                    <td class="${totalPnlClass}">
+                        <strong>${position.totalPnL.toFixed(2)}</strong>
+                    </td>
+                    <td class="${pnlPercentClass}">
+                        ${pnlPercent.toFixed(2)}%
+                    </td>
+                    <td>
+                        ${isOpenPosition ? '<span class="badge bg-warning">OPEN</span>' : '<span class="badge bg-secondary">CLOSED</span>'}
+                    </td>
+                    <td>${timeStr}</td>
+                `;
+
+                positionsTableBody.appendChild(row);
+            });
+
+            // Обновляем статистику
+            updateStatistics(positions);
+        }
+
+        // Переключение автообновления
+        function toggleAutoRefresh() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+
+            if (autoRefreshEnabled) {
+                // Включаем автообновление
+                autoRefreshBtn.innerHTML = '<i class="bi bi-pause-circle"></i> Auto Refresh';
+                autoRefreshBtn.classList.remove('btn-outline-primary');
+                autoRefreshBtn.classList.add('btn-primary');
+                autoRefreshStatus.textContent = '(ON)';
+
+                // Запускаем автообновление
+                refreshInterval = setInterval(() => {
+                    console.log('Auto-refreshing positions...');
+                    loadPositionsData();
+                }, REFRESH_INTERVAL);
+
+                // Немедленная загрузка данных
+                loadPositionsData();
+
+            } else {
+                // Выключаем автообновление
+                autoRefreshBtn.innerHTML = '<i class="bi bi-play-circle"></i> Auto Refresh';
+                autoRefreshBtn.classList.remove('btn-primary');
+                autoRefreshBtn.classList.add('btn-outline-primary');
+                autoRefreshStatus.textContent = '(OFF)';
+
+                // Останавливаем автообновление
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                    refreshInterval = null;
+                }
+            }
+        }
+
+        // Очистка фильтров
+        function clearFilters() {
+            document.getElementById('tickerFilter').value = '';
+            document.getElementById('strategyFilter').value = '';
+            document.getElementById('onlyOpenPositions').checked = true;
+
+            // Если автообновление включено, загружаем данные
+            if (autoRefreshEnabled) {
+                loadPositionsData();
+            } else {
+                // Иначе перезагружаем страницу
+                window.location.href = '/Positions';
+            }
+        }
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Positions page loaded');
+
+            // Инициализируем элементы
+            autoRefreshBtn = document.getElementById('autoRefreshBtn');
+            autoRefreshStatus = document.getElementById('autoRefreshStatus');
+            positionsCountBadge = document.getElementById('positionsCountBadge');
+            lastUpdateText = document.getElementById('lastUpdateText');
+            updatedPositionsBadge = document.getElementById('updatedPositionsBadge');
+            positionsTable = document.getElementById('positionsTable');
+            positionsTableBody = document.getElementById('positionsTableBody');
+
+            // Инициализируем статистические элементы
+            totalPnlElement = document.getElementById('totalPnl');
+            totalOpenPnlElement = document.getElementById('totalOpenPnl');
+            totalClosedPnlElement = document.getElementById('totalClosedPnl');
+            totalExposureElement = document.getElementById('totalExposure');
+            openPositionsCountElement = document.getElementById('openPositionsCount');
+            avgPnlPercentElement = document.getElementById('avgPnlPercent');
+
+            // Назначаем обработчики
+            if (autoRefreshBtn) {
+                autoRefreshBtn.addEventListener('click', toggleAutoRefresh);
+            }
+
+            if (document.getElementById('clearFiltersBtn')) {
+                document.getElementById('clearFiltersBtn').addEventListener('click', clearFilters);
+            }
+
+            // Обработчик чекбокса "Only Open Positions"
+            if (document.getElementById('onlyOpenPositions')) {
+                document.getElementById('onlyOpenPositions').addEventListener('change', function() {
+                    // Если автообновление включено, обновляем данные
+                    if (autoRefreshEnabled) {
+                        loadPositionsData();
+                    }
+                });
+            }
+
+            // Обработчик формы фильтров (предотвращаем перезагрузку страницы)
+            if (document.getElementById('filterForm')) {
+                document.getElementById('filterForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    // Если автообновление включено, используем его для загрузки данных
+                    if (autoRefreshEnabled) {
+                        loadPositionsData();
+                    } else {
+                        // Иначе отправляем форму обычным способом
+                        this.submit();
+                    }
+                });
+            }
+
+            // Обновляем время при загрузке
+            updateLastUpdateTime();
+
+            // Автоматически включаем автообновление при загрузке (опционально)
+            // toggleAutoRefresh();
+        });
+
+        // Очистка при закрытии страницы
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+}
+
