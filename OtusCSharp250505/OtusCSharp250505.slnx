@@ -7,4 +7,5 @@
   <Project Path="TradingPlatform053/TradingPlatform053.csproj" />
   <Project Path="TradingPlatform055/TradingPlatform055.csproj" Id="9c863cb9-4144-4ad9-95b4-449f9c14f670" />
   <Project Path="TradingPlatform057/TradingPlatform057.csproj" Id="2060498e-0dfa-498c-8335-2ff3e73332cc" />
+  <Project Path="TradingPlatform058/TradingPlatform058.csproj" Id="6841c859-525d-4986-bf44-822cd268447a" />
 </Solution>

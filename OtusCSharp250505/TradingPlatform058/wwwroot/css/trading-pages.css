@@ -1,0 +1,53 @@
+﻿.table-danger-light {
+    background-color: rgba(255, 0, 0, 0.05) !important;
+}
+
+.table-warning-light {
+    background-color: rgba(255, 193, 7, 0.05) !important;
+}
+
+.log-message {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.4;
+}
+
+/* Анимация для новых записей */
+@keyframes highlightNew {
+    0% {
+        background-color: rgba(255, 255, 0, 0.3);
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}
+
+.highlight-new {
+    animation: highlightNew 2s ease-out;
+}
+
+/* Стили для бейджей */
+.badge-info {
+    background-color: #17a2b8 !important;
+}
+
+.badge-warning {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.badge-danger {
+    background-color: #dc3545 !important;
+}
+
+.badge-success {
+    background-color: #28a745 !important;
+}
+
+/* Стили для таблицы */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+}
