@@ -17,19 +17,35 @@ namespace TradingPlatform.Services
         private readonly IDynamicSubscriptionManager _subscriptionManager;
         private int _eventsReceived = 0;
 
+        private readonly IInMemoryLogDatabase? _logDatabase;
+
         public TradingMonitorService(
-            ILogger<TradingMonitorService> logger,
-            IEventHub eventHub,
-            IDynamicSubscriptionManager subscriptionManager)
+        ILogger<TradingMonitorService> logger,
+        IEventHub eventHub,
+        IDynamicSubscriptionManager subscriptionManager,
+        IInMemoryLogDatabase? logDatabase = null) // Добавляем параметр
         {
             _logger = logger;
             _eventHub = eventHub;
             _subscriptionManager = subscriptionManager;
+            _logDatabase = logDatabase;
         }
+
+        //public TradingMonitorService(
+        //    ILogger<TradingMonitorService> logger,
+        //    IEventHub eventHub,
+        //    IDynamicSubscriptionManager subscriptionManager)
+        //{
+        //    _logger = logger;
+        //    _eventHub = eventHub;
+        //    _subscriptionManager = subscriptionManager;
+        //}
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("📊 TradingMonitorService запущен");
+            _logDatabase?.AddLog("🚀 TradingMonitorService запущен");
+
 
             // Подписываемся на интересующие нас события
             var subscriptions = new List<IDisposable>();
@@ -39,9 +55,14 @@ namespace TradingPlatform.Services
                 async (trade, ct) =>
                 {
                     Interlocked.Increment(ref _eventsReceived);
-                    _logger.LogInformation(
-                        "📊 TRADE: {Symbol} {Side} {Qty} @ {Price:F2} by {Strategy}",
-                        trade.Symbol, trade.Side, trade.Quantity, trade.Price, trade.StrategyName);
+                    //_logger.LogInformation(
+                    //    "📊 TRADE: {Symbol} {Side} {Qty} @ {Price:F2} by {Strategy}",
+                    //    trade.Symbol, trade.Side, trade.Quantity, trade.Price, trade.StrategyName);
+
+                    var logMessage = $"📊 TRADE: {trade.Symbol} {trade.Side} {trade.Quantity} @ {trade.Price:F2} by {trade.StrategyName}";
+                    _logger?.LogInformation(logMessage);
+                    _logDatabase?.AddLog(logMessage, trade.Symbol, trade.StrategyName);
+
                 }));
 
             // Мониторинг котировок

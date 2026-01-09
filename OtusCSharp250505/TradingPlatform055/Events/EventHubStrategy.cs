@@ -13,6 +13,7 @@ namespace TradingPlatform.Services
     {
         private readonly IEventHub _eventHub;
         private readonly ILogger<EventHubStrategy>? _logger;
+        private readonly IInMemoryLogDatabase? _logDatabase;
 
         // Используем Reflection для доступа к приватному полю _currentAction
         private TradingAction GetCurrentAction()
@@ -30,11 +31,13 @@ namespace TradingPlatform.Services
         }
 
         public EventHubStrategy(string ticker, int cycleTicks, string strategyName,
-            IEventHub eventHub, ILogger<EventHubStrategy>? logger = null)
+            IEventHub eventHub, ILogger<EventHubStrategy>? logger = null,
+            IInMemoryLogDatabase? logDatabase = null)
             : base(ticker, cycleTicks, strategyName)
         {
             _eventHub = eventHub;
             _logger = logger;
+            _logDatabase = logDatabase;
 
             _logger?.LogInformation("🔄 Создана EventHubStrategy: {Name} для {Ticker}",
                 strategyName, ticker);
@@ -116,12 +119,23 @@ namespace TradingPlatform.Services
                 await _eventHub.PublishAsync(tradeEvent);
 
                 // Важные действия логируем как Information
-                _logger?.LogInformation("📊 TRADE: {Ticker} {Side} {Qty} @ {Price} ({Strategy})",
-                    trade.Ticker, trade.Side, trade.Qty, trade.Price, StrategyName);
+                //_logger?.LogInformation("📊 TRADE: {Ticker} {Side} {Qty} @ {Price} ({Strategy})",
+                //    trade.Ticker, trade.Side, trade.Qty, trade.Price, StrategyName);
+
+                // Важные действия логируем как Information
+                var logMessage = $"📊 TRADE: {trade.Ticker} {trade.Side} {trade.Qty} @ {trade.Price} ({StrategyName})";
+                _logger?.LogInformation(logMessage);
+
+                // Также записываем в нашу базу логов
+                _logDatabase?.AddLog(logMessage, trade.Ticker, StrategyName);
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "❌ Ошибка при публикации события TradeExecuted");
+                // _logger?.LogError(ex, "❌ Ошибка при публикации события TradeExecuted");
+
+                var errorMessage = $"❌ Ошибка при публикации события TradeExecuted: {ex.Message}";
+                _logger?.LogError(ex, errorMessage);
+                _logDatabase?.AddLog(errorMessage, trade.Ticker, StrategyName);
             }
         }
 

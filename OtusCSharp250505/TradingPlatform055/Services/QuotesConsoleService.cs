@@ -14,13 +14,26 @@ public class QuotesConsoleService : BackgroundService
     private DateTime _startTime = DateTime.Now;
     private readonly object _consoleLock = new();
 
+    private readonly IInMemoryLogDatabase? _logDatabase;
+
+    //public QuotesConsoleService(
+    //    ILogger<QuotesConsoleService> logger,
+    //    IDynamicSubscriptionManager subscriptionManager)
+    //{
+    //    _logger = logger;
+    //    _subscriptionManager = subscriptionManager;
+    //}
+
     public QuotesConsoleService(
         ILogger<QuotesConsoleService> logger,
-        IDynamicSubscriptionManager subscriptionManager)
+        IDynamicSubscriptionManager subscriptionManager,
+        IInMemoryLogDatabase? logDatabase = null) // Добавляем параметр
     {
         _logger = logger;
         _subscriptionManager = subscriptionManager;
+        _logDatabase = logDatabase;
     }
+
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -73,6 +86,60 @@ public class QuotesConsoleService : BackgroundService
             _logger.LogInformation("🛑 QuotesConsoleService остановлен. Всего котировок: {Count}", _totalQuotes);
         }
     }
+    //private void PrintQuote(QuoteGeneratedEvent quote)
+    //{
+    //    lock (_consoleLock)
+    //    {
+    //        var color = GetSymbolColor(quote.Symbol);
+    //        var timestamp = DateTime.Now.ToString("HH:mm:ss");
+    //        var change = GetChangeIndicator(quote);
+    //        var percentChange = GetPercentChange(quote);
+
+    //        Console.ForegroundColor = color;
+    //        Console.Write($"[{timestamp}] {quote.Symbol} ");
+
+    //        // Цвет для направления
+    //        if (quote.Close > quote.Open)
+    //        {
+    //            Console.ForegroundColor = ConsoleColor.Green;
+    //            Console.Write("↑");
+    //        }
+    //        else if (quote.Close < quote.Open)
+    //        {
+    //            Console.ForegroundColor = ConsoleColor.Red;
+    //            Console.Write("↓");
+    //        }
+    //        else
+    //        {
+    //            Console.ForegroundColor = ConsoleColor.Gray;
+    //            Console.Write("→");
+    //        }
+
+    //        Console.ForegroundColor = color;
+    //        Console.Write($" {quote.Close,8:F2}");
+
+    //        // Процентное изменение
+    //        if (quote.Close > quote.Open)
+    //        {
+    //            Console.ForegroundColor = ConsoleColor.Green;
+    //            Console.Write($" (+{percentChange:F2}%)");
+    //        }
+    //        else if (quote.Close < quote.Open)
+    //        {
+    //            Console.ForegroundColor = ConsoleColor.Red;
+    //            Console.Write($" ({percentChange:F2}%)");
+    //        }
+    //        else
+    //        {
+    //            Console.ForegroundColor = ConsoleColor.Gray;
+    //            Console.Write($" (0.00%)");
+    //        }
+
+    //        Console.WriteLine();
+    //        Console.ResetColor();
+    //    }
+    //}
+
     private void PrintQuote(QuoteGeneratedEvent quote)
     {
         lock (_consoleLock)
@@ -106,27 +173,35 @@ public class QuotesConsoleService : BackgroundService
             Console.Write($" {quote.Close,8:F2}");
 
             // Процентное изменение
+            string percentText;
             if (quote.Close > quote.Open)
             {
                 Console.ForegroundColor = ConsoleColor.Green;
+                percentText = $"(+{percentChange:F2}%)";
                 Console.Write($" (+{percentChange:F2}%)");
             }
             else if (quote.Close < quote.Open)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
+                percentText = $"({percentChange:F2}%)";
                 Console.Write($" ({percentChange:F2}%)");
             }
             else
             {
                 Console.ForegroundColor = ConsoleColor.Gray;
+                percentText = "(0.00%)";
                 Console.Write($" (0.00%)");
             }
 
             Console.WriteLine();
             Console.ResetColor();
+
+            // Записываем в базу логов
+            var logMessage = $"[{timestamp}] {quote.Symbol} {change} {quote.Close:F2} {percentText}";
+            _logDatabase?.AddLog(logMessage, quote.Symbol);
         }
     }
-   
+
 
     private ConsoleColor GetSymbolColor(string symbol)
     {
