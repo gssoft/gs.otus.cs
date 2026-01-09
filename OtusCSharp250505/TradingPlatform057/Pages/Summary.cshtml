@@ -1,0 +1,715 @@
+﻿@* @* Pages/Summary.cshtml *@
+@page
+@model TradingPlatform.Pages.SummaryModel
+@{
+    ViewData["Title"] = "Trading Summary";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>📊 Trading Summary</h1>
+        <div>
+            <span class="badge bg-info" id="summaryCountBadge">Total: @Model.TotalCount</span>
+            <a href="/Summary" class="btn btn-outline-secondary btn-sm ms-2">Manual Refresh</a>
+            <!-- Кнопка автообновления -->
+            <button id="autoRefreshBtn" class="btn btn-outline-primary btn-sm ms-2">
+                <i class="bi bi-play-circle"></i> Auto Refresh
+                <span id="autoRefreshStatus" class="ms-1">(OFF)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Общая статистика -->
+    <div class="row mb-4" id="summaryStats">
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Total P&L</h6>
+                    <h3 id="totalPnl" class="@(Model.TotalPnL > 0 ? "text-success" : Model.TotalPnL < 0 ? "text-danger" : "text-dark")">
+                        @Model.TotalPnL.ToString("N2")
+                    </h3>
+                    <small class="text-muted">
+                        Open: <span id="totalOpenPnl" class="@(Model.TotalOpenPnL > 0 ? "text-success" : Model.TotalOpenPnL < 0 ? "text-danger" : "text-dark")">
+                            @Model.TotalOpenPnL.ToString("N2")
+                        </span>
+                        | Closed: <span id="totalClosedPnl" class="@(Model.TotalClosedPnL > 0 ? "text-success" : Model.TotalClosedPnL < 0 ? "text-danger" : "text-dark")">
+                            @Model.TotalClosedPnL.ToString("N2")
+                        </span>
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Total Positions</h6>
+                    <h3 id="totalPositions" class="text-primary">@Model.TotalCount</h3>
+                    <small class="text-muted">
+                        Open: <span id="openPositions">@Model.OpenPositions</span>
+                        | Closed: <span id="closedPositions">@Model.ClosedPositions</span>
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Active Strategies</h6>
+                    <h3 id="activeStrategies" class="text-info">@Model.ActiveStrategies</h3>
+                    <small class="text-muted">With open positions</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Avg P&L</h6>
+                    <h3 id="avgPnl" class="text-warning">@Model.AveragePnL.ToString("N2")</h3>
+                    <small class="text-muted">Per strategy</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filters</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3" id="filterForm">
+                <div class="col-md-4">
+                    <label class="form-label">Ticker</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedTicker"
+                           id="tickerFilter"
+                           value="@Model.SelectedTicker"
+                           placeholder="Enter ticker (e.g., AAA)">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Strategy</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedStrategy"
+                           id="strategyFilter"
+                           value="@Model.SelectedStrategy"
+                           placeholder="Enter strategy (e.g., AAA_05s)">
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
+                    <button type="button" class="btn btn-outline-secondary" id="clearFiltersBtn">Clear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Сводная таблица -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                Ticker & Strategy Summary
+                <small class="text-muted ms-2" id="lastUpdateText">
+                    Last update: @DateTime.Now.ToString("HH:mm:ss")
+                </small>
+            </h5>
+            <div>
+                <span class="badge bg-info">Page @Model.PageNumber of @Model.TotalPages</span>
+                <span class="badge bg-success ms-2" id="updatedSummaryBadge" style="display: none;">+0 updated</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 600px;">
+                <table class="table table-hover mb-0" id="summaryTable">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Strategy</th>
+                            <th>Position</th>
+                            <th>Open P&L</th>
+                            <th>Closed P&L</th>
+                            <th>Total P&L</th>
+                            <th>Current Price</th>
+                            <th>Open Trades</th>
+                            <th>Total Trades</th>
+                            <th>Last Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summaryTableBody">
+                        @foreach (var summary in Model.Summaries)
+                        {
+                            <tr class="@(summary.Position > 0 ? "table-success-light" : summary.Position < 0 ? "table-danger-light" : "")">
+                                <td><strong>@summary.Ticker</strong></td>
+                                <td><small class="text-muted">@summary.Strategy</small></td>
+                                <td class="@(summary.Position > 0 ? "text-success fw-bold" : summary.Position < 0 ? "text-danger fw-bold" : "")">
+                                    @summary.Position.ToString("N0")
+                                </td>
+                                <td class="@(summary.OpenPnL > 0 ? "text-success" : summary.OpenPnL < 0 ? "text-danger" : "")">
+                                    @summary.OpenPnL.ToString("N2")
+                                </td>
+                                <td class="@(summary.ClosedPnL > 0 ? "text-success" : summary.ClosedPnL < 0 ? "text-danger" : "")">
+                                    @summary.ClosedPnL.ToString("N2")
+                                </td>
+                                <td class="@(summary.TotalPnL > 0 ? "text-success fw-bold" : summary.TotalPnL < 0 ? "text-danger fw-bold" : "")">
+                                    <strong>@summary.TotalPnL.ToString("N2")</strong>
+                                </td>
+                                <td>@summary.CurrentPrice.ToString("N2")</td>
+                                <td>
+                                    <span class="badge @(summary.OpenTrades > 0 ? "bg-warning" : "bg-secondary")">
+                                        @summary.OpenTrades
+                                    </span>
+                                </td>
+                                <td>@summary.TotalTrades</td>
+                                <td>@summary.LastUpdated.ToString("HH:mm:ss")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (Model.TotalPages > 1)
+        {
+            <div class="card-footer">
+                <nav>
+                    <ul class="pagination justify-content-center mb-0" id="pagination">
+                        @for (int i = 1; i <= Model.TotalPages; i++)
+                        {
+                            <li class="page-item @(i == Model.PageNumber ? "active" : "")">
+                                <a class="page-link"
+                                   href="/Summary?pageNumber=@i&selectedTicker=@Model.SelectedTicker&selectedStrategy=@Model.SelectedStrategy"
+                                   data-page="@i">
+                                    @i
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            </div>
+        }
+    </div>
+
+    <!-- Легенда -->
+    <div class="mt-3">
+        <div class="alert alert-light">
+            <h6 class="mb-2">Legend:</h6>
+            <div class="row">
+                <div class="col-md-3">
+                    <span class="badge bg-success">LONG</span> = Positive position
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-danger">SHORT</span> = Negative position
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-warning">OPEN</span> = Open trades
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-secondary">CLOSED</span> = Closed trades
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let autoRefreshEnabled = false;
+        let refreshInterval = null;
+        const REFRESH_INTERVAL = 8000; // 8 секунд (сводка обновляется реже)
+
+        // Элементы DOM
+        let autoRefreshBtn = null;
+        let autoRefreshStatus = null;
+        let summaryCountBadge = null;
+        let lastUpdateText = null;
+        let updatedSummaryBadge = null;
+        let summaryTable = null;
+        let summaryTableBody = null;
+
+        // Статистические элементы
+        let totalPnlElement = null;
+        let totalOpenPnlElement = null;
+        let totalClosedPnlElement = null;
+        let totalPositionsElement = null;
+        let openPositionsElement = null;
+        let closedPositionsElement = null;
+        let activeStrategiesElement = null;
+        let avgPnlElement = null;
+
+        // Простая анимация через изменение opacity
+        function animateTableRefresh() {
+            if (summaryTable) {
+                // Сохраняем текущую прозрачность
+                const originalOpacity = summaryTable.style.opacity || '1';
+
+                // Анимация: быстрое затемнение и осветление
+                summaryTable.style.transition = 'opacity 0.15s ease-in-out';
+                summaryTable.style.opacity = '0.8';
+
+                setTimeout(() => {
+                    summaryTable.style.opacity = '1';
+                }, 150);
+
+                // Возвращаем нормальное состояние
+                setTimeout(() => {
+                    summaryTable.style.transition = '';
+                    summaryTable.style.opacity = originalOpacity;
+                }, 300);
+            }
+        }
+
+        // Обновление времени последнего обновления
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            if (lastUpdateText) {
+                lastUpdateText.textContent = `Last update: ${timeStr}`;
+            }
+        }
+
+        // Обновление счетчика обновленных записей
+        let updatedSummaryCount = 0;
+        function updateSummaryCounter(increment = 0) {
+            if (increment > 0) {
+                updatedSummaryCount += increment;
+                updatedSummaryBadge.textContent = `+${updatedSummaryCount} updated`;
+                updatedSummaryBadge.style.display = 'inline';
+
+                // Через 10 секунд сбрасываем счетчик
+                setTimeout(() => {
+                    updatedSummaryCount = 0;
+                    updatedSummaryBadge.style.display = 'none';
+                }, 10000);
+            }
+        }
+
+        // Получение класса строки для позиции
+        function getPositionRowClass(position) {
+            if (position > 0) return 'table-success-light';
+            if (position < 0) return 'table-danger-light';
+            return '';
+        }
+
+        // Получение класса текста для позиции
+        function getPositionTextClass(position) {
+            if (position > 0) return 'text-success fw-bold';
+            if (position < 0) return 'text-danger fw-bold';
+            return '';
+        }
+
+        // Получение класса для PnL
+        function getPnlClass(value) {
+            if (value > 0) return 'text-success';
+            if (value < 0) return 'text-danger';
+            return '';
+        }
+
+        // Получение класса для Total PnL
+        function getTotalPnlClass(value) {
+            if (value > 0) return 'text-success fw-bold';
+            if (value < 0) return 'text-danger fw-bold';
+            return '';
+        }
+
+        // Обновление статистики
+        function updateStatistics(summaries) {
+            if (!summaries || summaries.length === 0) {
+                totalPnlElement.textContent = '0.00';
+                totalOpenPnlElement.textContent = '0.00';
+                totalClosedPnlElement.textContent = '0.00';
+                totalPositionsElement.textContent = '0';
+                openPositionsElement.textContent = '0';
+                closedPositionsElement.textContent = '0';
+                activeStrategiesElement.textContent = '0';
+                avgPnlElement.textContent = '0.00';
+                return;
+            }
+
+            // Вычисляем агрегаты
+            const totalOpenPnL = summaries.reduce((sum, s) => sum + s.openPnL, 0);
+            const totalClosedPnL = summaries.reduce((sum, s) => sum + s.closedPnL, 0);
+            const totalPnL = totalOpenPnL + totalClosedPnL;
+            const totalPositions = summaries.length;
+            const openPositions = summaries.filter(s => s.position !== 0).length;
+            const closedPositions = summaries.filter(s => s.position === 0).length;
+            const activeStrategies = summaries.filter(s => s.position !== 0).length;
+            const avgPnL = totalPositions > 0 ? totalPnL / totalPositions : 0;
+
+            // Обновляем элементы
+            totalPnlElement.textContent = totalPnL.toFixed(2);
+            totalPnlElement.className = totalPnL > 0 ? 'text-success' : totalPnL < 0 ? 'text-danger' : 'text-dark';
+
+            totalOpenPnlElement.textContent = totalOpenPnL.toFixed(2);
+            totalOpenPnlElement.className = totalOpenPnL > 0 ? 'text-success' : totalOpenPnL < 0 ? 'text-danger' : 'text-dark';
+
+            totalClosedPnlElement.textContent = totalClosedPnL.toFixed(2);
+            totalClosedPnlElement.className = totalClosedPnL > 0 ? 'text-success' : totalClosedPnL < 0 ? 'text-danger' : 'text-dark';
+
+            totalPositionsElement.textContent = totalPositions;
+            openPositionsElement.textContent = openPositions;
+            closedPositionsElement.textContent = closedPositions;
+            activeStrategiesElement.textContent = activeStrategies;
+            avgPnlElement.textContent = avgPnL.toFixed(2);
+            avgPnlElement.className = avgPnL > 0 ? 'text-success' : avgPnL < 0 ? 'text-danger' : 'text-warning';
+        }
+
+        // Загрузка данных через API
+        async function loadSummaryData() {
+            try {
+                const ticker = document.getElementById('tickerFilter').value || '';
+                const strategy = document.getElementById('strategyFilter').value || '';
+                const page = 1; // ВСЕГДА первая страница при автообновлении
+
+                console.log(`Loading summary: ticker=${ticker}, strategy=${strategy}, page=${page}`);
+
+                // Загружаем все сводки
+                const response = await fetch('/api/trading/summaries');
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('API response:', data);
+
+                // Фильтруем данные
+                let filteredSummaries = data;
+
+                if (ticker) {
+                    filteredSummaries = filteredSummaries.filter(s => s.ticker === ticker);
+                }
+
+                if (strategy) {
+                    filteredSummaries = filteredSummaries.filter(s => s.strategy === strategy);
+                }
+
+                // Сортируем по тикеру и стратегии
+                filteredSummaries = filteredSummaries.sort((a, b) => {
+                    if (a.ticker < b.ticker) return -1;
+                    if (a.ticker > b.ticker) return 1;
+                    if (a.strategy < b.strategy) return -1;
+                    if (a.strategy > b.strategy) return 1;
+                    return 0;
+                });
+
+                // Обновляем таблицу если данные получены
+                if (filteredSummaries && Array.isArray(filteredSummaries)) {
+                    updateSummaryTable(filteredSummaries);
+                }
+
+                // Обновляем счетчик
+                if (filteredSummaries) {
+                    summaryCountBadge.textContent = `Total: ${filteredSummaries.length}`;
+                }
+
+                // Обновляем время
+                updateLastUpdateTime();
+
+                // Анимируем таблицу
+                animateTableRefresh();
+
+                // Обновляем счетчик обновленных записей
+                if (filteredSummaries && filteredSummaries.length > 0) {
+                    updateSummaryCounter(1);
+                }
+
+                console.log('✅ Данные успешно обновлены');
+
+            } catch (error) {
+                console.error('❌ Ошибка загрузки данных:', error);
+            }
+        }
+
+        // Обновление таблицы сводки
+        function updateSummaryTable(summaries) {
+            if (!summaryTableBody) return;
+
+            // Очищаем таблицу
+            summaryTableBody.innerHTML = '';
+
+            // Добавляем записи в таблицу
+            summaries.forEach(summary => {
+                const row = document.createElement('tr');
+
+                // Определяем классы
+                const rowClass = getPositionRowClass(summary.position);
+                const positionTextClass = getPositionTextClass(summary.position);
+                const openPnlClass = getPnlClass(summary.openPnL);
+                const closedPnlClass = getPnlClass(summary.closedPnL);
+                const totalPnlClass = getTotalPnlClass(summary.totalPnL);
+                const openTradesBadgeClass = summary.openTrades > 0 ? 'bg-warning' : 'bg-secondary';
+
+                // Форматируем время
+                const lastUpdated = new Date(summary.lastUpdated);
+                const timeStr = lastUpdated.toLocaleTimeString('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                if (rowClass) {
+                    row.className = rowClass;
+                }
+
+                row.innerHTML = `
+                    <td><strong>${summary.ticker}</strong></td>
+                    <td><small class="text-muted">${summary.strategy}</small></td>
+                    <td class="${positionTextClass}">
+                        ${summary.position.toLocaleString()}
+                    </td>
+                    <td class="${openPnlClass}">${summary.openPnL.toFixed(2)}</td>
+                    <td class="${closedPnlClass}">${summary.closedPnL.toFixed(2)}</td>
+                    <td class="${totalPnlClass}">
+                        <strong>${summary.totalPnL.toFixed(2)}</strong>
+                    </td>
+                    <td>${summary.currentPrice.toFixed(2)}</td>
+                    <td>
+                        <span class="badge ${openTradesBadgeClass}">
+                            ${summary.openTrades}
+                        </span>
+                    </td>
+                    <td>${summary.totalTrades}</td>
+                    <td>${timeStr}</td>
+                `;
+
+                summaryTableBody.appendChild(row);
+            });
+
+            // Обновляем статистику
+            updateStatistics(summaries);
+        }
+
+        // Переключение автообновления
+        function toggleAutoRefresh() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+
+            if (autoRefreshEnabled) {
+                // Включаем автообновление
+                autoRefreshBtn.innerHTML = '<i class="bi bi-pause-circle"></i> Auto Refresh';
+                autoRefreshBtn.classList.remove('btn-outline-primary');
+                autoRefreshBtn.classList.add('btn-primary');
+                autoRefreshStatus.textContent = '(ON)';
+
+                // Запускаем автообновление
+                refreshInterval = setInterval(() => {
+                    console.log('Auto-refreshing summary...');
+                    loadSummaryData();
+                }, REFRESH_INTERVAL);
+
+                // Немедленная загрузка данных
+                loadSummaryData();
+
+            } else {
+                // Выключаем автообновление
+                autoRefreshBtn.innerHTML = '<i class="bi bi-play-circle"></i> Auto Refresh';
+                autoRefreshBtn.classList.remove('btn-primary');
+                autoRefreshBtn.classList.add('btn-outline-primary');
+                autoRefreshStatus.textContent = '(OFF)';
+
+                // Останавливаем автообновление
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                    refreshInterval = null;
+                }
+            }
+        }
+
+        // Очистка фильтров
+        function clearFilters() {
+            document.getElementById('tickerFilter').value = '';
+            document.getElementById('strategyFilter').value = '';
+
+            // Если автообновление включено, загружаем данные
+            if (autoRefreshEnabled) {
+                loadSummaryData();
+            } else {
+                // Иначе перезагружаем страницу
+                window.location.href = '/Summary';
+            }
+        }
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Summary page loaded');
+
+            // Инициализируем элементы
+            autoRefreshBtn = document.getElementById('autoRefreshBtn');
+            autoRefreshStatus = document.getElementById('autoRefreshStatus');
+            summaryCountBadge = document.getElementById('summaryCountBadge');
+            lastUpdateText = document.getElementById('lastUpdateText');
+            updatedSummaryBadge = document.getElementById('updatedSummaryBadge');
+            summaryTable = document.getElementById('summaryTable');
+            summaryTableBody = document.getElementById('summaryTableBody');
+
+            // Инициализируем статистические элементы
+            totalPnlElement = document.getElementById('totalPnl');
+            totalOpenPnlElement = document.getElementById('totalOpenPnl');
+            totalClosedPnlElement = document.getElementById('totalClosedPnl');
+            totalPositionsElement = document.getElementById('totalPositions');
+            openPositionsElement = document.getElementById('openPositions');
+            closedPositionsElement = document.getElementById('closedPositions');
+            activeStrategiesElement = document.getElementById('activeStrategies');
+            avgPnlElement = document.getElementById('avgPnl');
+
+            // Назначаем обработчики
+            if (autoRefreshBtn) {
+                autoRefreshBtn.addEventListener('click', toggleAutoRefresh);
+            }
+
+            if (document.getElementById('clearFiltersBtn')) {
+                document.getElementById('clearFiltersBtn').addEventListener('click', clearFilters);
+            }
+
+            // Обработчик формы фильтров (предотвращаем перезагрузку страницы)
+            if (document.getElementById('filterForm')) {
+                document.getElementById('filterForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    // Если автообновление включено, используем его для загрузки данных
+                    if (autoRefreshEnabled) {
+                        loadSummaryData();
+                    } else {
+                        // Иначе отправляем форму обычным способом
+                        this.submit();
+                    }
+                });
+            }
+
+            // Обновляем время при загрузке
+            updateLastUpdateTime();
+
+            // Автоматически включаем автообновление при загрузке (опционально)
+            // toggleAutoRefresh();
+        });
+
+        // Очистка при закрытии страницы
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+}
+
+@* @page
+@model TradingPlatform.Pages.SummaryModel
+@{
+    ViewData["Title"] = "Trading Summary";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>📊 Trading Summary</h1>
+        <div>
+            <span class="badge bg-info">Total: @Model.TotalCount</span>
+            <a href="/Summary" class="btn btn-outline-secondary btn-sm ms-2">Refresh</a>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filters</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Ticker</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedTicker"
+                           value="@Model.SelectedTicker"
+                           placeholder="Enter ticker (e.g., AAA)">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Strategy</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedStrategy"
+                           value="@Model.SelectedStrategy"
+                           placeholder="Enter strategy (e.g., AAA_05s)">
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
+                    <a href="/Summary" class="btn btn-outline-secondary">Clear</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Сводная таблица -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Ticker & Strategy Summary</h5>
+            <span class="badge bg-info">Page @Model.PageNumber of @Model.TotalPages</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 600px;">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Strategy</th>
+                            <th>Position</th>
+                            <th>Open P&L</th>
+                            <th>Closed P&L</th>
+                            <th>Total P&L</th>
+                            <th>Current Price</th>
+                            <th>Open Trades</th>
+                            <th>Total Trades</th>
+                            <th>Last Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var summary in Model.Summaries)
+                        {
+                            <tr class="@(summary.Position > 0 ? "table-success-light" : summary.Position < 0 ? "table-danger-light" : "")">
+                                <td><strong>@summary.Ticker</strong></td>
+                                <td>@summary.Strategy</td>
+                                <td class="@(summary.Position > 0 ? "text-success fw-bold" : summary.Position < 0 ? "text-danger fw-bold" : "")">
+                                    @summary.Position.ToString("N0")
+                                </td>
+                                <td class="@(summary.OpenPnL > 0 ? "text-success" : summary.OpenPnL < 0 ? "text-danger" : "")">
+                                    @summary.OpenPnL.ToString("N2")
+                                </td>
+                                <td class="@(summary.ClosedPnL > 0 ? "text-success" : summary.ClosedPnL < 0 ? "text-danger" : "")">
+                                    @summary.ClosedPnL.ToString("N2")
+                                </td>
+                                <td class="@(summary.TotalPnL > 0 ? "text-success fw-bold" : summary.TotalPnL < 0 ? "text-danger fw-bold" : "")">
+                                    <strong>@summary.TotalPnL.ToString("N2")</strong>
+                                </td>
+                                <td>@summary.CurrentPrice.ToString("N2")</td>
+                                <td><span class="badge @(summary.OpenTrades > 0 ? "bg-warning" : "bg-secondary")">@summary.OpenTrades</span></td>
+                                <td>@summary.TotalTrades</td>
+                                <td>@summary.LastUpdated.ToString("HH:mm:ss")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (Model.TotalPages > 1)
+        {
+            <div class="card-footer">
+                <nav>
+                    <ul class="pagination justify-content-center mb-0">
+                        @for (int i = 1; i <= Model.TotalPages; i++)
+                        {
+                            <li class="page-item @(i == Model.PageNumber ? "active" : "")">
+                                <a class="page-link"
+                                   href="/Summary?pageNumber=@i&selectedTicker=@Model.SelectedTicker&selectedStrategy=@Model.SelectedStrategy">
+                                    @i
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            </div>
+        }
+    </div>
+</div> *@

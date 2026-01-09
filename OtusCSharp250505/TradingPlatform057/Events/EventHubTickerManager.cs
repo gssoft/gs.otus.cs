@@ -33,8 +33,6 @@ public class EventHubTickerManager
         {
             _logger.LogInformation("🔄 Начинаю инициализацию тикеров...");
 
-            var logDatabase = _serviceProvider.GetService<IInMemoryLogDatabase>();
-
             var tickerSymbols = new[]
             {
                 "AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "GGG", "HHH",
@@ -80,24 +78,21 @@ public class EventHubTickerManager
                     5,
                     $"{ticker.Symbol}_05s",
                     _eventHub,
-                    _loggerFactory.CreateLogger<EventHubStrategy>(),
-                    logDatabase));
+                    _loggerFactory.CreateLogger<EventHubStrategy>()));
 
                 ticker.Strategies.Add(new EventHubStrategy(
                     ticker.Symbol,
                     10,
                     $"{ticker.Symbol}_10s",
                     _eventHub,
-                    _loggerFactory.CreateLogger<EventHubStrategy>(),
-                    logDatabase));
+                    _loggerFactory.CreateLogger<EventHubStrategy>()));
 
                 ticker.Strategies.Add(new EventHubStrategy(
                     ticker.Symbol,
                     15,
                     $"{ticker.Symbol}_15s",
                     _eventHub,
-                    _loggerFactory.CreateLogger<EventHubStrategy>(),
-                    logDatabase));
+                    _loggerFactory.CreateLogger<EventHubStrategy>()));
 
                 _tickers.Add(ticker);
 

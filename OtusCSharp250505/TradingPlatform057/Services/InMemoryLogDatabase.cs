@@ -1,243 +1,243 @@
-﻿// Services/InMemoryLogDatabase.cs
-using System.Collections.Concurrent;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using TradingPlatform.Visualization;
+﻿//// Services/InMemoryLogDatabase.cs
+//using System.Collections.Concurrent;
+//using Microsoft.Extensions.Hosting;
+//using Microsoft.Extensions.Logging;
+//using TradingPlatform.Visualization;
 
-namespace TradingPlatform.Services
-{
-    public interface IInMemoryLogDatabase
-    {
-        IEnumerable<TradingLog> GetLogs(
-            string? ticker = null,
-            string? strategy = null,
-            string? level = null,
-            string? category = null,
-            int page = 1,
-            int pageSize = 50);
+//namespace TradingPlatform.Services
+//{
+//    public interface IInMemoryLogDatabase
+//    {
+//        IEnumerable<TradingLog> GetLogs(
+//            string? ticker = null,
+//            string? strategy = null,
+//            string? level = null,
+//            string? category = null,
+//            int page = 1,
+//            int pageSize = 50);
 
-        PagedResult<TradingLog> GetPagedLogs(
-            string? ticker = null,
-            string? strategy = null,
-            string? level = null,
-            string? category = null,
-            int page = 1,
-            int pageSize = 50);
+//        PagedResult<TradingLog> GetPagedLogs(
+//            string? ticker = null,
+//            string? strategy = null,
+//            string? level = null,
+//            string? category = null,
+//            int page = 1,
+//            int pageSize = 50);
 
-        int GetTotalCount();
-        void AddLog(TradingLog log);
+//        int GetTotalCount();
+//        void AddLog(TradingLog log);
 
-        event Action<TradingLog> LogAdded;
-    }
+//        event Action<TradingLog> LogAdded;
+//    }
 
-    public class InMemoryLogDatabase : BackgroundService, IInMemoryLogDatabase
-    {
-        private readonly ILogger<InMemoryLogDatabase> _logger;
-        private ConcurrentQueue<TradingLog> _logs = new();
-        private readonly TimeSpan _retentionPeriod = TimeSpan.FromHours(24);
-        private readonly object _cleanupLock = new();
-        private DateTime _lastCleanup = DateTime.UtcNow;
-        private const int MAX_LOGS = 10000; // Максимум 10,000 записей
+//    public class InMemoryLogDatabase : BackgroundService, IInMemoryLogDatabase
+//    {
+//        private readonly ILogger<InMemoryLogDatabase> _logger;
+//        private ConcurrentQueue<TradingLog> _logs = new();
+//        private readonly TimeSpan _retentionPeriod = TimeSpan.FromHours(24);
+//        private readonly object _cleanupLock = new();
+//        private DateTime _lastCleanup = DateTime.UtcNow;
+//        private const int MAX_LOGS = 10000; // Максимум 10,000 записей
 
-        public event Action<TradingLog>? LogAdded;
+//        public event Action<TradingLog>? LogAdded;
 
-        public InMemoryLogDatabase(ILogger<InMemoryLogDatabase> logger)
-        {
-            _logger = logger;
-            _logger.LogInformation("📝 InMemoryLogDatabase создан (хранение 24 часа, максимум {MaxLogs} записей)", MAX_LOGS);
-        }
+//        public InMemoryLogDatabase(ILogger<InMemoryLogDatabase> logger)
+//        {
+//            _logger = logger;
+//            _logger.LogInformation("📝 InMemoryLogDatabase создан (хранение 24 часа, максимум {MaxLogs} записей)", MAX_LOGS);
+//        }
 
-        public void AddLog(TradingLog log)
-        {
-            try
-            {
-                // Ограничиваем количество логов
-                if (_logs.Count >= MAX_LOGS)
-                {
-                    _logs.TryDequeue(out _); // Удаляем старую запись
-                }
+//        public void AddLog(TradingLog log)
+//        {
+//            try
+//            {
+//                // Ограничиваем количество логов
+//                if (_logs.Count >= MAX_LOGS)
+//                {
+//                    _logs.TryDequeue(out _); // Удаляем старую запись
+//                }
 
-                _logs.Enqueue(log);
+//                _logs.Enqueue(log);
 
-                // Периодическая очистка старых логов
-                if (DateTime.UtcNow - _lastCleanup > TimeSpan.FromMinutes(5))
-                {
-                    CleanupOldLogs();
-                }
+//                // Периодическая очистка старых логов
+//                if (DateTime.UtcNow - _lastCleanup > TimeSpan.FromMinutes(5))
+//                {
+//                    CleanupOldLogs();
+//                }
 
-                LogAdded?.Invoke(log);
+//                LogAdded?.Invoke(log);
 
-                // Логируем только каждую 100-ю запись для отладки
-                if (_logs.Count % 100 == 0)
-                {
-                    _logger.LogDebug("Log database: {Count} records", _logs.Count);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка при добавлении лога");
-            }
-        }
+//                // Логируем только каждую 100-ю запись для отладки
+//                if (_logs.Count % 100 == 0)
+//                {
+//                    _logger.LogDebug("Log database: {Count} records", _logs.Count);
+//                }
+//            }
+//            catch (Exception ex)
+//            {
+//                _logger.LogError(ex, "Ошибка при добавлении лога");
+//            }
+//        }
 
-        private void CleanupOldLogs()
-        {
-            lock (_cleanupLock)
-            {
-                try
-                {
-                    var cutoffTime = DateTime.UtcNow - _retentionPeriod;
-                    int removedCount = 0;
+//        private void CleanupOldLogs()
+//        {
+//            lock (_cleanupLock)
+//            {
+//                try
+//                {
+//                    var cutoffTime = DateTime.UtcNow - _retentionPeriod;
+//                    int removedCount = 0;
 
-                    // Создаем временный список для актуальных логов
-                    var recentLogs = new List<TradingLog>();
+//                    // Создаем временный список для актуальных логов
+//                    var recentLogs = new List<TradingLog>();
 
-                    while (_logs.TryDequeue(out var log))
-                    {
-                        if (log.Timestamp >= cutoffTime)
-                        {
-                            recentLogs.Add(log);
-                        }
-                        else
-                        {
-                            removedCount++;
-                        }
-                    }
+//                    while (_logs.TryDequeue(out var log))
+//                    {
+//                        if (log.Timestamp >= cutoffTime)
+//                        {
+//                            recentLogs.Add(log);
+//                        }
+//                        else
+//                        {
+//                            removedCount++;
+//                        }
+//                    }
 
-                    // Возвращаем актуальные логи обратно
-                    foreach (var log in recentLogs.OrderBy(l => l.Timestamp))
-                    {
-                        _logs.Enqueue(log);
-                    }
+//                    // Возвращаем актуальные логи обратно
+//                    foreach (var log in recentLogs.OrderBy(l => l.Timestamp))
+//                    {
+//                        _logs.Enqueue(log);
+//                    }
 
-                    _lastCleanup = DateTime.UtcNow;
+//                    _lastCleanup = DateTime.UtcNow;
 
-                    if (removedCount > 0)
-                    {
-                        _logger.LogDebug("Очищено {Count} старых логов (старше 24 часов)", removedCount);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Ошибка при очистке старых логов");
-                }
-            }
-        }
+//                    if (removedCount > 0)
+//                    {
+//                        _logger.LogDebug("Очищено {Count} старых логов (старше 24 часов)", removedCount);
+//                    }
+//                }
+//                catch (Exception ex)
+//                {
+//                    _logger.LogError(ex, "Ошибка при очистке старых логов");
+//                }
+//            }
+//        }
 
-        public IEnumerable<TradingLog> GetLogs(
-            string? ticker = null,
-            string? strategy = null,
-            string? level = null,
-            string? category = null,
-            int page = 1,
-            int pageSize = 50)
-        {
-            var logs = _logs.AsEnumerable();
+//        public IEnumerable<TradingLog> GetLogs(
+//            string? ticker = null,
+//            string? strategy = null,
+//            string? level = null,
+//            string? category = null,
+//            int page = 1,
+//            int pageSize = 50)
+//        {
+//            var logs = _logs.AsEnumerable();
 
-            // Фильтруем логи (новые сверху)
-            logs = logs.OrderByDescending(l => l.Timestamp);
+//            // Фильтруем логи (новые сверху)
+//            logs = logs.OrderByDescending(l => l.Timestamp);
 
-            if (!string.IsNullOrEmpty(ticker))
-                logs = logs.Where(l => l.Ticker == ticker);
+//            if (!string.IsNullOrEmpty(ticker))
+//                logs = logs.Where(l => l.Ticker == ticker);
 
-            if (!string.IsNullOrEmpty(strategy))
-                logs = logs.Where(l => l.Strategy == strategy);
+//            if (!string.IsNullOrEmpty(strategy))
+//                logs = logs.Where(l => l.Strategy == strategy);
 
-            if (!string.IsNullOrEmpty(level))
-                logs = logs.Where(l => l.Level == level);
+//            if (!string.IsNullOrEmpty(level))
+//                logs = logs.Where(l => l.Level == level);
 
-            if (!string.IsNullOrEmpty(category))
-                logs = logs.Where(l => l.Category == category);
+//            if (!string.IsNullOrEmpty(category))
+//                logs = logs.Where(l => l.Category == category);
 
-            // Пагинация
-            if (page > 0 && pageSize > 0)
-            {
-                logs = logs.Skip((page - 1) * pageSize).Take(pageSize);
-            }
+//            // Пагинация
+//            if (page > 0 && pageSize > 0)
+//            {
+//                logs = logs.Skip((page - 1) * pageSize).Take(pageSize);
+//            }
 
-            return logs.ToList();
-        }
+//            return logs.ToList();
+//        }
 
-        public PagedResult<TradingLog> GetPagedLogs(
-            string? ticker = null,
-            string? strategy = null,
-            string? level = null,
-            string? category = null,
-            int page = 1,
-            int pageSize = 50)
-        {
-            var allLogs = _logs.AsEnumerable();
+//        public PagedResult<TradingLog> GetPagedLogs(
+//            string? ticker = null,
+//            string? strategy = null,
+//            string? level = null,
+//            string? category = null,
+//            int page = 1,
+//            int pageSize = 50)
+//        {
+//            var allLogs = _logs.AsEnumerable();
 
-            // Фильтрация
-            if (!string.IsNullOrEmpty(ticker))
-                allLogs = allLogs.Where(l => l.Ticker == ticker);
+//            // Фильтрация
+//            if (!string.IsNullOrEmpty(ticker))
+//                allLogs = allLogs.Where(l => l.Ticker == ticker);
 
-            if (!string.IsNullOrEmpty(strategy))
-                allLogs = allLogs.Where(l => l.Strategy == strategy);
+//            if (!string.IsNullOrEmpty(strategy))
+//                allLogs = allLogs.Where(l => l.Strategy == strategy);
 
-            if (!string.IsNullOrEmpty(level))
-                allLogs = allLogs.Where(l => l.Level == level);
+//            if (!string.IsNullOrEmpty(level))
+//                allLogs = allLogs.Where(l => l.Level == level);
 
-            if (!string.IsNullOrEmpty(category))
-                allLogs = allLogs.Where(l => l.Category == category);
+//            if (!string.IsNullOrEmpty(category))
+//                allLogs = allLogs.Where(l => l.Category == category);
 
-            var totalCount = allLogs.Count();
+//            var totalCount = allLogs.Count();
 
-            // Сортировка (новые сверху) и пагинация
-            var items = allLogs
-                .OrderByDescending(l => l.Timestamp)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
+//            // Сортировка (новые сверху) и пагинация
+//            var items = allLogs
+//                .OrderByDescending(l => l.Timestamp)
+//                .Skip((page - 1) * pageSize)
+//                .Take(pageSize)
+//                .ToList();
 
-            return new PagedResult<TradingLog>
-            {
-                Items = items,
-                PageNumber = page,
-                PageSize = pageSize,
-                TotalCount = totalCount
-            };
-        }
+//            return new PagedResult<TradingLog>
+//            {
+//                Items = items,
+//                PageNumber = page,
+//                PageSize = pageSize,
+//                TotalCount = totalCount
+//            };
+//        }
 
-        public int GetTotalCount()
-        {
-            return _logs.Count;
-        }
+//        public int GetTotalCount()
+//        {
+//            return _logs.Count;
+//        }
 
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-        {
-            _logger.LogInformation("📝 InMemoryLogDatabase запущен");
+//        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+//        {
+//            _logger.LogInformation("📝 InMemoryLogDatabase запущен");
 
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                try
-                {
-                    // Периодическая очистка старых логов
-                    CleanupOldLogs();
+//            while (!stoppingToken.IsCancellationRequested)
+//            {
+//                try
+//                {
+//                    // Периодическая очистка старых логов
+//                    CleanupOldLogs();
 
-                    // Логируем статистику каждые 30 минут
-                    if (DateTime.UtcNow.Minute % 30 == 0 && DateTime.UtcNow.Second < 5)
-                    {
-                        _logger.LogInformation("📊 Статистика логов: {Count} записей (макс {MaxLogs}, храним 24 часа)",
-                            _logs.Count, MAX_LOGS);
-                    }
+//                    // Логируем статистику каждые 30 минут
+//                    if (DateTime.UtcNow.Minute % 30 == 0 && DateTime.UtcNow.Second < 5)
+//                    {
+//                        _logger.LogInformation("📊 Статистика логов: {Count} записей (макс {MaxLogs}, храним 24 часа)",
+//                            _logs.Count, MAX_LOGS);
+//                    }
 
-                    await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken); // Раз в 5 минут
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Ошибка в основном цикле InMemoryLogDatabase");
-                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
-                }
-            }
+//                    await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken); // Раз в 5 минут
+//                }
+//                catch (OperationCanceledException)
+//                {
+//                    break;
+//                }
+//                catch (Exception ex)
+//                {
+//                    _logger.LogError(ex, "Ошибка в основном цикле InMemoryLogDatabase");
+//                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+//                }
+//            }
 
-            _logger.LogInformation("📝 InMemoryLogDatabase остановлен");
-        }
-    }
-}
+//            _logger.LogInformation("📝 InMemoryLogDatabase остановлен");
+//        }
+//    }
+//}
 
 //// Services/InMemoryLogDatabase.cs
 //using System.Collections.Concurrent;

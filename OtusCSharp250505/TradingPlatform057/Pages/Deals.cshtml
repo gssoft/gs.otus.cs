@@ -1,0 +1,548 @@
+﻿@* Pages/Deals.cshtml *@
+@page
+@model TradingPlatform.Pages.DealsModel
+@{
+    ViewData["Title"] = "Deals";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>💰 Deals</h1>
+        <div>
+            <span class="badge bg-info" id="dealsCountBadge">Total: @Model.Deals.TotalCount</span>
+            <a href="/Deals" class="btn btn-outline-secondary btn-sm ms-2">Manual Refresh</a>
+            <!-- Кнопка автообновления -->
+            <button id="autoRefreshBtn" class="btn btn-outline-primary btn-sm ms-2">
+                <i class="bi bi-play-circle"></i> Auto Refresh
+                <span id="autoRefreshStatus" class="ms-1">(OFF)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filters</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3" id="filterForm">
+                <div class="col-md-4">
+                    <label class="form-label">Ticker</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedTicker"
+                           id="tickerFilter"
+                           value="@Model.SelectedTicker"
+                           placeholder="Enter ticker (e.g., AAA)">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Strategy</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedStrategy"
+                           id="strategyFilter"
+                           value="@Model.SelectedStrategy"
+                           placeholder="Enter strategy (e.g., AAA_05s)">
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
+                    <button type="button" class="btn btn-outline-secondary" id="clearFiltersBtn">Clear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Статистика по PnL -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Total P&L</h6>
+                    <h3 id="totalPnl" class="text-dark">0.00</h3>
+                    <small class="text-muted">All deals</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Profitable</h6>
+                    <h3 id="profitableCount" class="text-success">0</h3>
+                    <small class="text-muted">Profitable deals</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Losing</h6>
+                    <h3 id="losingCount" class="text-danger">0</h3>
+                    <small class="text-muted">Losing deals</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Avg P&L</h6>
+                    <h3 id="avgPnl" class="text-info">0.00</h3>
+                    <small class="text-muted">Per deal</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица сделок -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                Closed Deals
+                <small class="text-muted ms-2" id="lastUpdateText">
+                    Last update: @DateTime.Now.ToString("HH:mm:ss")
+                </small>
+            </h5>
+            <div>
+                <span class="badge bg-info">Page @Model.Deals.PageNumber of @Model.Deals.TotalPages</span>
+                <span class="badge bg-success ms-2" id="newDealsBadge" style="display: none;">+0 new</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 600px;">
+                <table class="table table-hover mb-0" id="dealsTable">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Time <small class="text-muted">(newest first)</small></th>
+                            <th>Ticker</th>
+                            <th>Strategy</th>
+                            <th>Deal #</th>
+                            <th>Side</th>
+                            <th>Open Price</th>
+                            <th>Close Price</th>
+                            <th>Quantity</th>
+                            <th>P&L</th>
+                            <th>Return %</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dealsTableBody">
+                        @foreach (var deal in Model.Deals.Items.OrderByDescending(d => d.Timestamp))
+                        {
+                            <tr>
+                                <td>
+                                    @deal.Timestamp.ToString("HH:mm:ss")
+                                    @if ((DateTime.Now - deal.Timestamp).TotalSeconds < 10)
+                                    {
+                                        <span class="badge bg-warning ms-1">NEW</span>
+                                    }
+                                </td>
+                                <td><strong>@deal.Ticker</strong></td>
+                                <td><small class="text-muted">@deal.Strategy</small></td>
+                                <td><small class="text-muted">#@deal.DealNumber</small></td>
+                                <td>
+                                    <span class="badge @(deal.Side == "Buy" ? "bg-success" : "bg-danger")">
+                                        @deal.Side
+                                    </span>
+                                </td>
+                                <td>@deal.OpenPrice.ToString("N2")</td>
+                                <td>@deal.ClosePrice.ToString("N2")</td>
+                                <td>@deal.Qty.ToString("N0")</td>
+                                <td class="@(deal.PnL > 0 ? "text-success fw-bold" : deal.PnL < 0 ? "text-danger fw-bold" : "text-dark")">
+                                    @deal.PnL.ToString("N2")
+                                </td>
+                                <td class="@(deal.PnL > 0 ? "text-success" : deal.PnL < 0 ? "text-danger" : "text-dark")">
+                                    @{
+                                        var returnPercent = deal.OpenPrice != 0
+                                        ? (deal.ClosePrice - deal.OpenPrice) / deal.OpenPrice * 100
+                                        : 0;
+                                    }
+                                    @returnPercent.ToString("N2")%
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (Model.Deals.TotalPages > 1)
+        {
+            <div class="card-footer">
+                <nav>
+                    <ul class="pagination justify-content-center mb-0" id="pagination">
+                        @for (int i = 1; i <= Model.Deals.TotalPages; i++)
+                        {
+                            <li class="page-item @(i == Model.Deals.PageNumber ? "active" : "")">
+                                <a class="page-link"
+                                   href="/Deals?pageNumber=@i&selectedTicker=@Model.SelectedTicker&selectedStrategy=@Model.SelectedStrategy"
+                                   data-page="@i">
+                                    @i
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            </div>
+        }
+    </div>
+
+    <!-- Легенда -->
+    <div class="mt-3">
+        <div class="alert alert-light">
+            <h6 class="mb-2">Legend:</h6>
+            <div class="row">
+                <div class="col-md-4">
+                    <span class="badge bg-success">Buy</span> = Long position
+                </div>
+                <div class="col-md-4">
+                    <span class="badge bg-danger">Sell</span> = Short position
+                </div>
+                <div class="col-md-4">
+                    <span class="badge bg-warning">NEW</span> = Deal closed in last 10 seconds
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let autoRefreshEnabled = false;
+        let refreshInterval = null;
+        const REFRESH_INTERVAL = 5000; // 5 секунд
+
+        // Элементы DOM
+        let autoRefreshBtn = null;
+        let autoRefreshStatus = null;
+        let dealsCountBadge = null;
+        let lastUpdateText = null;
+        let newDealsBadge = null;
+        let dealsTable = null;
+        let dealsTableBody = null;
+
+        // Статистические элементы
+        let totalPnlElement = null;
+        let profitableCountElement = null;
+        let losingCountElement = null;
+        let avgPnlElement = null;
+
+        // Простая анимация через изменение opacity
+        function animateTableRefresh() {
+            if (dealsTable) {
+                // Сохраняем текущую прозрачность
+                const originalOpacity = dealsTable.style.opacity || '1';
+
+                // Анимация: быстрое затемнение и осветление
+                dealsTable.style.transition = 'opacity 0.15s ease-in-out';
+                dealsTable.style.opacity = '0.8';
+
+                setTimeout(() => {
+                    dealsTable.style.opacity = '1';
+                }, 150);
+
+                // Возвращаем нормальное состояние
+                setTimeout(() => {
+                    dealsTable.style.transition = '';
+                    dealsTable.style.opacity = originalOpacity;
+                }, 300);
+            }
+        }
+
+        // Обновление времени последнего обновления
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            if (lastUpdateText) {
+                lastUpdateText.textContent = `Last update: ${timeStr}`;
+            }
+        }
+
+        // Обновление счетчика новых сделок
+        let newDealsCount = 0;
+        function updateNewDealsCount(increment = 0) {
+            if (increment > 0) {
+                newDealsCount += increment;
+                newDealsBadge.textContent = `+${newDealsCount} new`;
+                newDealsBadge.style.display = 'inline';
+
+                // Через 5 секунд сбрасываем счетчик
+                setTimeout(() => {
+                    newDealsCount = 0;
+                    newDealsBadge.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Обновление статистики
+        function updateStatistics(deals) {
+            if (!deals || deals.length === 0) {
+                totalPnlElement.textContent = '0.00';
+                profitableCountElement.textContent = '0';
+                losingCountElement.textContent = '0';
+                avgPnlElement.textContent = '0.00';
+                return;
+            }
+
+            const totalPnL = deals.reduce((sum, deal) => sum + deal.pnL, 0);
+            const profitable = deals.filter(deal => deal.pnL > 0).length;
+            const losing = deals.filter(deal => deal.pnL < 0).length;
+            const avgPnL = totalPnL / deals.length;
+
+            // Обновляем элементы
+            totalPnlElement.textContent = totalPnL.toFixed(2);
+            profitableCountElement.textContent = profitable;
+            losingCountElement.textContent = losing;
+            avgPnlElement.textContent = avgPnL.toFixed(2);
+
+            // Изменяем цвет Total P&L
+            totalPnlElement.className = totalPnL > 0 ? 'text-success' : totalPnL < 0 ? 'text-danger' : 'text-dark';
+        }
+
+        // Расчет процента возврата
+        function calculateReturnPercent(openPrice, closePrice) {
+            if (openPrice === 0) return 0;
+            return ((closePrice - openPrice) / openPrice) * 100;
+        }
+
+        // Загрузка данных через API
+        async function loadDealsData() {
+            try {
+                const ticker = document.getElementById('tickerFilter').value || '';
+                const strategy = document.getElementById('strategyFilter').value || '';
+                const page = 1; // ВСЕГДА первая страница при автообновлении, чтобы видеть новые сделки
+
+                console.log(`Loading deals: ticker=${ticker}, strategy=${strategy}, page=${page}`);
+
+                const response = await fetch(`/api/trading/deals?ticker=${encodeURIComponent(ticker)}&strategy=${encodeURIComponent(strategy)}&page=${page}`);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('API response:', data);
+
+                // Обновляем таблицу если данные получены
+                if (data && data.items && Array.isArray(data.items)) {
+                    updateDealsTable(data.items);
+                    updateStatistics(data.items);
+                }
+
+                // Обновляем счетчик
+                if (data && data.totalCount !== undefined) {
+                    dealsCountBadge.textContent = `Total: ${data.totalCount}`;
+                }
+
+                // Обновляем время
+                updateLastUpdateTime();
+
+                // Анимируем таблицу
+                animateTableRefresh();
+
+                // Обновляем счетчик новых сделок (если есть новые)
+                if (data.items && data.items.length > 0) {
+                    updateNewDealsCount(data.items.length);
+                }
+
+                console.log('✅ Данные успешно обновлены');
+
+            } catch (error) {
+                console.error('❌ Ошибка загрузки данных:', error);
+            }
+        }
+
+        // Обновление таблицы сделок
+        function updateDealsTable(deals) {
+            if (!dealsTableBody) return;
+
+            // Очищаем таблицу
+            dealsTableBody.innerHTML = '';
+
+            // Сортируем сделки по времени (новые сверху)
+            deals.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            // Добавляем сделки в таблицу
+            deals.forEach(deal => {
+                const row = document.createElement('tr');
+
+                // Форматируем время
+                const timestamp = new Date(deal.timestamp);
+                const timeStr = timestamp.toLocaleTimeString('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                // Проверяем, новая ли это сделка (последние 10 секунд)
+                const isNew = (Date.now() - timestamp.getTime()) < 10000;
+
+                // Определяем класс для Side
+                const sideClass = deal.side === 'Buy' ? 'bg-success' : 'bg-danger';
+
+                // Определяем классы для PnL
+                const pnlClass = deal.pnL > 0 ? 'text-success fw-bold' : deal.pnL < 0 ? 'text-danger fw-bold' : 'text-dark';
+                const returnPercent = calculateReturnPercent(deal.openPrice, deal.closePrice);
+                const returnClass = deal.pnL > 0 ? 'text-success' : deal.pnL < 0 ? 'text-danger' : 'text-dark';
+
+                row.innerHTML = `
+                    <td>
+                        ${timeStr}
+                        ${isNew ? '<span class="badge bg-warning ms-1">NEW</span>' : ''}
+                    </td>
+                    <td><strong>${deal.ticker}</strong></td>
+                    <td><small class="text-muted">${deal.strategy}</small></td>
+                    <td><small class="text-muted">#${deal.dealNumber}</small></td>
+                    <td>
+                        <span class="badge ${sideClass}">${deal.side}</span>
+                    </td>
+                    <td>${deal.openPrice.toFixed(2)}</td>
+                    <td>${deal.closePrice.toFixed(2)}</td>
+                    <td>${deal.qty.toLocaleString()}</td>
+                    <td class="${pnlClass}">
+                        ${deal.pnL.toFixed(2)}
+                    </td>
+                    <td class="${returnClass}">
+                        ${returnPercent.toFixed(2)}%
+                    </td>
+                `;
+
+                // Добавляем анимацию для новых сделок
+                if (isNew) {
+                    row.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
+                    row.style.animation = 'fadeOutBackground 2s forwards';
+
+                    // Добавляем стиль для анимации
+                    if (!document.querySelector('#fadeOutStyle')) {
+                        const style = document.createElement('style');
+                        style.id = 'fadeOutStyle';
+                        style.textContent = `
+                            @@keyframes fadeOutBackground {
+                                from { background-color: rgba(255, 255, 0, 0.1); }
+                                to { background-color: transparent; }
+                            }
+                        `;
+                        document.head.appendChild(style);
+                    }
+                }
+
+                // Подсветка по PnL
+                if (deal.pnL > 50) {
+                    row.style.backgroundColor = 'rgba(0, 255, 0, 0.05)';
+                } else if (deal.pnL < -50) {
+                    row.style.backgroundColor = 'rgba(255, 0, 0, 0.05)';
+                }
+
+                dealsTableBody.appendChild(row);
+            });
+        }
+
+        // Переключение автообновления
+        function toggleAutoRefresh() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+
+            if (autoRefreshEnabled) {
+                // Включаем автообновление
+                autoRefreshBtn.innerHTML = '<i class="bi bi-pause-circle"></i> Auto Refresh';
+                autoRefreshBtn.classList.remove('btn-outline-primary');
+                autoRefreshBtn.classList.add('btn-primary');
+                autoRefreshStatus.textContent = '(ON)';
+
+                // Запускаем автообновление
+                refreshInterval = setInterval(() => {
+                    console.log('Auto-refreshing deals...');
+                    loadDealsData();
+                }, REFRESH_INTERVAL);
+
+                // Немедленная загрузка данных
+                loadDealsData();
+
+            } else {
+                // Выключаем автообновление
+                autoRefreshBtn.innerHTML = '<i class="bi bi-play-circle"></i> Auto Refresh';
+                autoRefreshBtn.classList.remove('btn-primary');
+                autoRefreshBtn.classList.add('btn-outline-primary');
+                autoRefreshStatus.textContent = '(OFF)';
+
+                // Останавливаем автообновление
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                    refreshInterval = null;
+                }
+            }
+        }
+
+        // Очистка фильтров
+        function clearFilters() {
+            document.getElementById('tickerFilter').value = '';
+            document.getElementById('strategyFilter').value = '';
+
+            // Если автообновление включено, загружаем данные
+            if (autoRefreshEnabled) {
+                loadDealsData();
+            } else {
+                // Иначе перезагружаем страницу
+                window.location.href = '/Deals';
+            }
+        }
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Deals page loaded');
+
+            // Инициализируем элементы
+            autoRefreshBtn = document.getElementById('autoRefreshBtn');
+            autoRefreshStatus = document.getElementById('autoRefreshStatus');
+            dealsCountBadge = document.getElementById('dealsCountBadge');
+            lastUpdateText = document.getElementById('lastUpdateText');
+            newDealsBadge = document.getElementById('newDealsBadge');
+            dealsTable = document.getElementById('dealsTable');
+            dealsTableBody = document.getElementById('dealsTableBody');
+
+            // Инициализируем статистические элементы
+            totalPnlElement = document.getElementById('totalPnl');
+            profitableCountElement = document.getElementById('profitableCount');
+            losingCountElement = document.getElementById('losingCount');
+            avgPnlElement = document.getElementById('avgPnl');
+
+            // Назначаем обработчики
+            if (autoRefreshBtn) {
+                autoRefreshBtn.addEventListener('click', toggleAutoRefresh);
+            }
+
+            if (document.getElementById('clearFiltersBtn')) {
+                document.getElementById('clearFiltersBtn').addEventListener('click', clearFilters);
+            }
+
+            // Обработчик формы фильтров (предотвращаем перезагрузку страницы)
+            if (document.getElementById('filterForm')) {
+                document.getElementById('filterForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    // Если автообновление включено, используем его для загрузки данных
+                    if (autoRefreshEnabled) {
+                        loadDealsData();
+                    } else {
+                        // Иначе отправляем форму обычным способом
+                        this.submit();
+                    }
+                });
+            }
+
+            // Обновляем время при загрузке
+            updateLastUpdateTime();
+
+            // Автоматически включаем автообновление при загрузке (опционально)
+            // toggleAutoRefresh();
+        });
+
+        // Очистка при закрытии страницы
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+}
+
