@@ -105,6 +105,16 @@ builder.Services.AddSingleton<InMemoryTradingDatabase>();
 builder.Services.AddSingleton<IInMemoryTradingDatabase>(provider =>
     provider.GetRequiredService<InMemoryTradingDatabase>());
 
+// 5.2
+// Регистрация InMemoryLogDatabase
+builder.Services.AddSingleton<InMemoryLogDatabase>();
+builder.Services.AddSingleton<IInMemoryLogDatabase>(provider =>
+    provider.GetRequiredService<InMemoryLogDatabase>());
+
+// Регистрация TradingLogService
+builder.Services.AddHostedService<TradingLogService>();
+
+
 // 6. SignalR ДО фоновых сервисов
 builder.Services.AddSignalR();
 
@@ -455,6 +465,17 @@ app.MapGet("/api/ports", () =>
             FullUrl = $"{addresses.FirstOrDefault() ?? "http://localhost:5000"}{p.Path}"
         })
     });
+});
+
+// В Program.cs, в разделе API endpoints добавить:
+app.MapGet("/api/trading/logs", (IInMemoryLogDatabase logDatabase,
+    [FromQuery] string? ticker,
+    [FromQuery] string? strategy,
+    [FromQuery] string? level,
+    [FromQuery] string? category,
+    [FromQuery] int page = 1) =>
+{
+    return Results.Ok(logDatabase.GetPagedLogs(ticker, strategy, level, category, page, 50));
 });
 // --------------------------
 

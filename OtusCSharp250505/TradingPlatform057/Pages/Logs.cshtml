@@ -1,0 +1,697 @@
+﻿@* Pages/Logs.cshtml *@
+@page
+@model TradingPlatform.Pages.LogsModel
+@{
+    ViewData["Title"] = "Trading Logs";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>📝 Trading Logs <small class="text-muted">(24 часа истории)</small></h1>
+        <div>
+            <span class="badge bg-info" id="logsCountBadge">Total: @Model.Logs.TotalCount</span>
+            <a href="/Logs" class="btn btn-outline-secondary btn-sm ms-2">Manual Refresh</a>
+            <!-- Кнопка автообновления -->
+            <button id="autoRefreshBtn" class="btn btn-outline-primary btn-sm ms-2">
+                <i class="bi bi-play-circle"></i> Auto Refresh
+                <span id="autoRefreshStatus" class="ms-1">(OFF)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filters</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3" id="filterForm">
+                <div class="col-md-3">
+                    <label class="form-label">Ticker</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedTicker"
+                           id="tickerFilter"
+                           value="@Model.SelectedTicker"
+                           placeholder="Enter ticker (e.g., AAA)">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Strategy</label>
+                    <input type="text"
+                           class="form-control"
+                           name="selectedStrategy"
+                           id="strategyFilter"
+                           value="@Model.SelectedStrategy"
+                           placeholder="Enter strategy (e.g., AAA_05s)">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Level</label>
+                    <select class="form-control" name="selectedLevel" id="levelFilter">
+                        <option value="">All Levels</option>
+                        <option value="Information" selected="@(Model.SelectedLevel == "Information")">Information</option>
+                        <option value="Warning" selected="@(Model.SelectedLevel == "Warning")">Warning</option>
+                        <option value="Error" selected="@(Model.SelectedLevel == "Error")">Error</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Category</label>
+                    <select class="form-control" name="selectedCategory" id="categoryFilter">
+                        <option value="">All Categories</option>
+                        <option value="EventHubStrategy" selected="@(Model.SelectedCategory == "EventHubStrategy")">EventHubStrategy</option>
+                        <option value="QuotesConsoleService" selected="@(Model.SelectedCategory == "QuotesConsoleService")">QuotesConsoleService</option>
+                        <option value="TradingMonitorService" selected="@(Model.SelectedCategory == "TradingMonitorService")">TradingMonitorService</option>
+                        <option value="EventHub" selected="@(Model.SelectedCategory == "EventHub")">EventHub</option>
+                        <option value="System" selected="@(Model.SelectedCategory == "System")">System</option>
+                    </select>
+                </div>
+                <div class="col-md-12 d-flex justify-content-end mt-3">
+                    <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
+                    <button type="button" class="btn btn-outline-secondary" id="clearFiltersBtn">Clear</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Статистика логов -->
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Total</h6>
+                    <h3 id="totalLogs" class="text-dark">@Model.Logs.TotalCount</h3>
+                    <small class="text-muted">Log entries</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Information</h6>
+                    <h3 id="infoLogs" class="text-info">0</h3>
+                    <small class="text-muted">Info messages</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Warnings</h6>
+                    <h3 id="warningLogs" class="text-warning">0</h3>
+                    <small class="text-muted">Warning messages</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Errors</h6>
+                    <h3 id="errorLogs" class="text-danger">0</h3>
+                    <small class="text-muted">Error messages</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Trades</h6>
+                    <h3 id="tradeLogs" class="text-success">0</h3>
+                    <small class="text-muted">Trade events</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title text-muted">Deals</h6>
+                    <h3 id="dealLogs" class="text-primary">0</h3>
+                    <small class="text-muted">Deal events</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица логов -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                Recent Logs <small class="text-muted">(newest first)</small>
+                <small class="text-muted ms-2" id="lastUpdateText">
+                    Last update: @DateTime.Now.ToString("HH:mm:ss")
+                </small>
+            </h5>
+            <div>
+                <span class="badge bg-info">Page @Model.Logs.PageNumber of @Model.Logs.TotalPages</span>
+                <span class="badge bg-success ms-2" id="newLogsBadge" style="display: none;">+0 new</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 600px;">
+                <table class="table table-hover mb-0" id="logsTable">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Time</th>
+                            <th>Ticker</th>
+                            <th>Strategy</th>
+                            <th>Level</th>
+                            <th>Category</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                        @foreach (var log in Model.Logs.Items)
+                        {
+                            <tr class="@GetLogRowClass(log.Level)">
+                                <td>@log.Timestamp.ToString("HH:mm:ss")</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(log.Ticker))
+                                    {
+                                        <strong>@log.Ticker</strong>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(log.Strategy))
+                                    {
+                                        <small class="text-muted">@log.Strategy</small>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge @GetLevelBadgeClass(log.Level)">
+                                        @log.Level
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">
+                                        @log.Category
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="log-message">
+                                        @Html.Raw(FormatLogMessage(log.FormattedMessage))
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (Model.Logs.TotalPages > 1)
+        {
+            <div class="card-footer">
+                <nav>
+                    <ul class="pagination justify-content-center mb-0" id="pagination">
+                        @for (int i = 1; i <= Model.Logs.TotalPages; i++)
+                        {
+                            <li class="page-item @(i == Model.PageNumber ? "active" : "")">
+                                <a class="page-link"
+                                   href="/Logs?pageNumber=@i&selectedTicker=@Model.SelectedTicker&selectedStrategy=@Model.SelectedStrategy&selectedLevel=@Model.SelectedLevel&selectedCategory=@Model.SelectedCategory"
+                                   data-page="@i">
+                                    @i
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            </div>
+        }
+    </div>
+
+    <!-- Легенда -->
+    <div class="mt-3">
+        <div class="alert alert-light">
+            <h6 class="mb-2">Legend:</h6>
+            <div class="row">
+                <div class="col-md-3">
+                    <span class="badge bg-info">Information</span> = Normal events
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-warning">Warning</span> = Important notices
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-danger">Error</span> = Error messages
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-success">Trades</span> = Trade executions
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    private string GetLogRowClass(string level)
+    {
+        return level switch
+        {
+            "Error" => "table-danger-light",
+            "Warning" => "table-warning-light",
+            _ => ""
+        };
+    }
+
+    private string GetLevelBadgeClass(string level)
+    {
+        return level switch
+        {
+            "Information" => "bg-info",
+            "Warning" => "bg-warning",
+            "Error" => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string FormatLogMessage(string message)
+    {
+        // Простая замена эмодзи на HTML-сущности или оставляем как есть
+        return message
+            .Replace("📊", "<span class='text-success'>📊</span>")
+            .Replace("💰", "<span class='text-primary'>💰</span>")
+            .Replace("📈", "<span class='text-info'>📈</span>")
+            .Replace("❌", "<span class='text-danger'>❌</span>")
+            .Replace("⚠️", "<span class='text-warning'>⚠️</span>")
+            .Replace("✅", "<span class='text-success'>✅</span>")
+            .Replace("🟢", "<span class='text-success'>🟢</span>")
+            .Replace("🔴", "<span class='text-danger'>🔴</span>")
+            .Replace("↑", "<span class='text-success'>↑</span>")
+            .Replace("↓", "<span class='text-danger'>↓</span>")
+            .Replace("→", "<span class='text-secondary'>→</span>");
+    }
+}
+
+@section Scripts {
+    <script>
+        let autoRefreshEnabled = false;
+        let refreshInterval = null;
+        const REFRESH_INTERVAL = 5000; // 5 секунд
+
+        // Элементы DOM
+        let autoRefreshBtn = null;
+        let autoRefreshStatus = null;
+        let logsCountBadge = null;
+        let lastUpdateText = null;
+        let newLogsBadge = null;
+        let logsTable = null;
+        let logsTableBody = null;
+
+        // Статистические элементы
+        let totalLogsElement = null;
+        let infoLogsElement = null;
+        let warningLogsElement = null;
+        let errorLogsElement = null;
+        let tradeLogsElement = null;
+        let dealLogsElement = null;
+
+        // Простая анимация через изменение opacity
+        function animateTableRefresh() {
+            if (logsTable) {
+                const originalOpacity = logsTable.style.opacity || '1';
+                logsTable.style.transition = 'opacity 0.15s ease-in-out';
+                logsTable.style.opacity = '0.8';
+
+                setTimeout(() => {
+                    logsTable.style.opacity = '1';
+                }, 150);
+
+                setTimeout(() => {
+                    logsTable.style.transition = '';
+                    logsTable.style.opacity = originalOpacity;
+                }, 300);
+            }
+        }
+
+        // Обновление времени последнего обновления
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            if (lastUpdateText) {
+                lastUpdateText.textContent = `Last update: ${timeStr}`;
+            }
+        }
+
+        // Обновление счетчика новых логов
+        let newLogsCount = 0;
+        function updateNewLogsCount(increment = 0) {
+            if (increment > 0) {
+                newLogsCount += increment;
+                newLogsBadge.textContent = `+${newLogsCount} new`;
+                newLogsBadge.style.display = 'inline';
+
+                setTimeout(() => {
+                    newLogsCount = 0;
+                    newLogsBadge.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Обновление статистики
+        function updateStatistics(logs) {
+            if (!logs || logs.length === 0) {
+                totalLogsElement.textContent = '0';
+                infoLogsElement.textContent = '0';
+                warningLogsElement.textContent = '0';
+                errorLogsElement.textContent = '0';
+                tradeLogsElement.textContent = '0';
+                dealLogsElement.textContent = '0';
+                return;
+            }
+
+            const infoCount = logs.filter(l => l.level === 'Information').length;
+            const warningCount = logs.filter(l => l.level === 'Warning').length;
+            const errorCount = logs.filter(l => l.level === 'Error').length;
+            const tradeCount = logs.filter(l => l.message.includes('TRADE:')).length;
+            const dealCount = logs.filter(l => l.message.includes('DEAL')).length;
+
+            totalLogsElement.textContent = logs.length;
+            infoLogsElement.textContent = infoCount;
+            warningLogsElement.textContent = warningCount;
+            errorLogsElement.textContent = errorCount;
+            tradeLogsElement.textContent = tradeCount;
+            dealLogsElement.textContent = dealCount;
+        }
+
+        // Получение класса строки для уровня лога
+        function getLogRowClass(level) {
+            switch (level) {
+                case 'Error': return 'table-danger-light';
+                case 'Warning': return 'table-warning-light';
+                default: return '';
+            }
+        }
+
+        // Получение класса бейджа для уровня
+        function getLevelBadgeClass(level) {
+            switch (level) {
+                case 'Information': return 'bg-info';
+                case 'Warning': return 'bg-warning';
+                case 'Error': return 'bg-danger';
+                default: return 'bg-secondary';
+            }
+        }
+
+        // Форматирование сообщения лога
+        function formatLogMessage(message) {
+            return message
+                .replace(/📊/g, "<span class='text-success'>📊</span>")
+                .replace(/💰/g, "<span class='text-primary'>💰</span>")
+                .replace(/📈/g, "<span class='text-info'>📈</span>")
+                .replace(/❌/g, "<span class='text-danger'>❌</span>")
+                .replace(/⚠️/g, "<span class='text-warning'>⚠️</span>")
+                .replace(/✅/g, "<span class='text-success'>✅</span>")
+                .replace(/🟢/g, "<span class='text-success'>🟢</span>")
+                .replace(/🔴/g, "<span class='text-danger'>🔴</span>")
+                .replace(/↑/g, "<span class='text-success'>↑</span>")
+                .replace(/↓/g, "<span class='text-danger'>↓</span>")
+                .replace(/→/g, "<span class='text-secondary'>→</span>");
+        }
+
+        // Загрузка данных через API
+        // async function loadLogsData() {
+        //     try {
+        //         const ticker = document.getElementById('tickerFilter').value || '';
+        //         const strategy = document.getElementById('strategyFilter').value || '';
+        //         const level = document.getElementById('levelFilter').value || '';
+        //         const category = document.getElementById('categoryFilter').value || '';
+        //         const page = 1; // Всегда первая страница при автообновлении
+
+        //         console.log(`Loading logs: ticker=${ticker}, strategy=${strategy}, level=${level}, category=${category}, page=${page}`);
+
+        //         const response = await fetch(`/api/trading/logs?ticker=${encodeURIComponent(ticker)}&strategy=${encodeURIComponent(strategy)}&level=${encodeURIComponent(level)}&category=${encodeURIComponent(category)}&page=${page}`);
+
+        //         if (!response.ok) {
+        //             throw new Error(`HTTP error! status: ${response.status}`);
+        //         }
+
+        //         const data = await response.json();
+        //         console.log('API response:', data);
+
+        //         // Обновляем таблицу если данные получены
+        //         if (data && data.items && Array.isArray(data.items)) {
+        //             updateLogsTable(data.items);
+        //             updateStatistics(data.items);
+        //         }
+
+        //         // Обновляем счетчик
+        //         if (data && data.totalCount !== undefined) {
+        //             logsCountBadge.textContent = `Total: ${data.totalCount}`;
+        //         }
+
+        //         // Обновляем время
+        //         updateLastUpdateTime();
+
+        //         // Анимируем таблицу
+        //         animateTableRefresh();
+
+        //         // Обновляем счетчик новых логов
+        //         if (data.items && data.items.length > 0) {
+        //             updateNewLogsCount(1);
+        //         }
+
+        //         console.log('✅ Данные успешно обновлены');
+
+        //     } catch (error) {
+        //         console.error('❌ Ошибка загрузки данных:', error);
+        //     }
+        // }
+                // В Logs.cshtml, в секции Scripts обновите:
+        async function loadLogsData() {
+            try {
+                const ticker = document.getElementById('tickerFilter').value || '';
+                const strategy = document.getElementById('strategyFilter').value || '';
+                const level = document.getElementById('levelFilter').value || '';
+                const category = document.getElementById('categoryFilter').value || '';
+                const page = 1;
+
+                console.log(`Loading logs: ticker=${ticker}, strategy=${strategy}, level=${level}, category=${category}`);
+
+                const response = await fetch(`/api/trading/logs?ticker=${encodeURIComponent(ticker)}&strategy=${encodeURIComponent(strategy)}&level=${encodeURIComponent(level)}&category=${encodeURIComponent(category)}&page=${page}`);
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                const data = await response.json();
+
+                if (data && data.items && Array.isArray(data.items)) {
+                    updateLogsTable(data.items);
+                    updateStatistics(data.items);
+                }
+
+                if (data && data.totalCount !== undefined) {
+                    logsCountBadge.textContent = `Total: ${data.totalCount}`;
+                }
+
+                updateLastUpdateTime();
+                animateTableRefresh();
+
+                if (data.items && data.items.length > 0) {
+                    updateNewLogsCount(data.items.filter(log =>
+                        (Date.now() - new Date(log.timestamp).getTime()) < 10000
+                    ).length);
+                }
+
+            } catch (error) {
+                console.error('❌ Ошибка загрузки логов:', error);
+            }
+        }
+
+        // Обновление таблицы логов
+        function updateLogsTable(logs) {
+            if (!logsTableBody) return;
+
+            // Очищаем таблицу
+            logsTableBody.innerHTML = '';
+
+            // Сортируем логи по времени (новые сверху)
+            logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            // Добавляем логи в таблицу
+            logs.forEach(log => {
+                const row = document.createElement('tr');
+
+                // Определяем классы
+                const rowClass = getLogRowClass(log.level);
+                const badgeClass = getLevelBadgeClass(log.level);
+
+                // Форматируем время
+                const timestamp = new Date(log.timestamp);
+                const timeStr = timestamp.toLocaleTimeString('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                row.className = rowClass;
+                row.innerHTML = `
+                    <td>${timeStr}</td>
+                    <td>
+                        ${log.ticker ? `<strong>${log.ticker}</strong>` : '<span class="text-muted">—</span>'}
+                    </td>
+                    <td>
+                        ${log.strategy ? `<small class="text-muted">${log.strategy}</small>` : '<span class="text-muted">—</span>'}
+                    </td>
+                    <td>
+                        <span class="badge ${badgeClass}">
+                            ${log.level}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge bg-secondary">
+                            ${log.category}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="log-message">
+                            ${formatLogMessage(log.formattedMessage || log.message)}
+                        </div>
+                    </td>
+                `;
+
+                // Подсветка новых логов (последние 10 секунд)
+                const isNew = (Date.now() - timestamp.getTime()) < 10000;
+                if (isNew) {
+                    row.style.backgroundColor = 'rgba(255, 255, 0, 0.05)';
+                }
+
+                logsTableBody.appendChild(row);
+            });
+        }
+
+        // Переключение автообновления
+        function toggleAutoRefresh() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+
+            if (autoRefreshEnabled) {
+                // Включаем автообновление
+                autoRefreshBtn.innerHTML = '<i class="bi bi-pause-circle"></i> Auto Refresh';
+                autoRefreshBtn.classList.remove('btn-outline-primary');
+                autoRefreshBtn.classList.add('btn-primary');
+                autoRefreshStatus.textContent = '(ON)';
+
+                // Запускаем автообновление
+                refreshInterval = setInterval(() => {
+                    console.log('Auto-refreshing logs...');
+                    loadLogsData();
+                }, REFRESH_INTERVAL);
+
+                // Немедленная загрузка данных
+                loadLogsData();
+
+            } else {
+                // Выключаем автообновление
+                autoRefreshBtn.innerHTML = '<i class="bi bi-play-circle"></i> Auto Refresh';
+                autoRefreshBtn.classList.remove('btn-primary');
+                autoRefreshBtn.classList.add('btn-outline-primary');
+                autoRefreshStatus.textContent = '(OFF)';
+
+                // Останавливаем автообновление
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                    refreshInterval = null;
+                }
+            }
+        }
+
+        // Очистка фильтров
+        function clearFilters() {
+            document.getElementById('tickerFilter').value = '';
+            document.getElementById('strategyFilter').value = '';
+            document.getElementById('levelFilter').value = '';
+            document.getElementById('categoryFilter').value = '';
+
+            // Если автообновление включено, загружаем данные
+            if (autoRefreshEnabled) {
+                loadLogsData();
+            } else {
+                // Иначе перезагружаем страницу
+                window.location.href = '/Logs';
+            }
+        }
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Logs page loaded');
+
+            // Инициализируем элементы
+            autoRefreshBtn = document.getElementById('autoRefreshBtn');
+            autoRefreshStatus = document.getElementById('autoRefreshStatus');
+            logsCountBadge = document.getElementById('logsCountBadge');
+            lastUpdateText = document.getElementById('lastUpdateText');
+            newLogsBadge = document.getElementById('newLogsBadge');
+            logsTable = document.getElementById('logsTable');
+            logsTableBody = document.getElementById('logsTableBody');
+
+            // Инициализируем статистические элементы
+            totalLogsElement = document.getElementById('totalLogs');
+            infoLogsElement = document.getElementById('infoLogs');
+            warningLogsElement = document.getElementById('warningLogs');
+            errorLogsElement = document.getElementById('errorLogs');
+            tradeLogsElement = document.getElementById('tradeLogs');
+            dealLogsElement = document.getElementById('dealLogs');
+
+            // Назначаем обработчики
+            if (autoRefreshBtn) {
+                autoRefreshBtn.addEventListener('click', toggleAutoRefresh);
+            }
+
+            if (document.getElementById('clearFiltersBtn')) {
+                document.getElementById('clearFiltersBtn').addEventListener('click', clearFilters);
+            }
+
+            // Обработчик формы фильтров (предотвращаем перезагрузку страницы)
+            if (document.getElementById('filterForm')) {
+                document.getElementById('filterForm').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    // Если автообновление включено, используем его для загрузки данных
+                    if (autoRefreshEnabled) {
+                        loadLogsData();
+                    } else {
+                        // Иначе отправляем форму обычным способом
+                        this.submit();
+                    }
+                });
+            }
+
+            // Обновляем время при загрузке
+            updateLastUpdateTime();
+
+            // Автоматически включаем автообновление при загрузке
+            // toggleAutoRefresh(); // Раскомментируйте, если хотите автообновление по умолчанию
+        });
+
+        // Очистка при закрытии страницы
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+
+    <style>
+        .table-danger-light {
+            background-color: rgba(255, 0, 0, 0.05);
+        }
+
+        .table-warning-light {
+            background-color: rgba(255, 193, 7, 0.05);
+        }
+
+        .log-message {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    </style>
+}
