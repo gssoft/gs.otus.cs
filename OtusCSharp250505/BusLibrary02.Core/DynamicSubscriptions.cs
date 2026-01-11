@@ -146,8 +146,8 @@ public sealed class DynamicSubscriptionManager : IDynamicSubscriptionManager, ID
         _typeToStaticKeyMap[typeof(TMessage)] = key;
     }
 
-    // Остальные методы остаются без изменений...
-    // Unsubscribe, GetHandlers, GetSubscribedKeys и т.д.
+    
+    
 
     /// <summary>
     /// Отписаться от события по ключу
