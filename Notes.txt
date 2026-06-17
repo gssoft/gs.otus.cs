@@ -1,1 +1,3 @@
 git config --global --add safe.directory D:/Projects/Otus25/gs.otus.cs
+Похоже что это основная версия и основной каталог.
+Проверка проводится 26.06.17 после СБОЯ в работе github
