@@ -1,0 +1,1 @@
+git config --global --add safe.directory D:/Projects/Otus25/gs.otus.cs
